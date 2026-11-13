@@ -47,3 +47,16 @@ públicas de `Red` conservan los parámetros de la diapositiva 10.
   O(log n + k') para n abiertas y k' resultados. Cada cambio cuesta O(log n)
   más búsquedas hash promedio. Mantener el orden en el árbol evita ordenar
   las estaciones en cada consulta.
+
+## Adaptador HTTP
+
+- El miembro 4 puede usar /docs para revisar las rutas cuando el cargador esté
+  integrado. El adaptador normaliza nombres de estación y conserva los IDs de
+  ruta. Devuelve HTTP 200 para ausencias y cambios sin efecto y 422 para
+  entradas inválidas.
+- Se propone scripts.benchmark.ejecutar_web(salida), que devuelve el objeto
+  JSON que escribe de forma atómica en la ruta indicada. Debe usar redes
+  temporales propias. La API limita las mediciones a una por proceso y responde
+  503 mientras el módulo de medición no esté disponible.
+- La app usa una Red por proceso, con un bloqueo para consultas y cambios.
+  La medición tiene su propio bloqueo. Las pruebas inyectan la red y el arnés.
