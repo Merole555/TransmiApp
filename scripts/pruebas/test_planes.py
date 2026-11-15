@@ -18,7 +18,7 @@ class RedPrueba:
                 siguiente = nodo
 
     def estado(self, nombre):
-        return nombre in self.ocurrencias, nombre in self.abiertas
+        return "NO_EXISTE" if nombre not in self.ocurrencias else ("ABIERTA" if nombre in self.abiertas else "CERRADA")
 
     def salidas(self, nombre):
         return self.ocurrencias.get(nombre, ())
@@ -32,9 +32,9 @@ class ViajeTests(unittest.TestCase):
         ])
 
     def test_directo_transbordo_y_sentido(self):
-        self.assertEqual(viaje(self.red, "A", "C"), (2, [("T1", "A", "C")]))
+        self.assertEqual(viaje(self.red, "A", "C"), ("DIRECTO", 2, [("T1", "A", "C")]))
         self.assertEqual(viaje(self.red, "A", "D"), (
-            2, [("T1", "A", "B"), ("T2", "B", "D")],
+            "TRANSBORDO", 2, [("T1", "A", "B"), ("T2", "B", "D")],
         ))
         self.assertIsNone(viaje(self.red, "D", "A"))
 
@@ -43,7 +43,7 @@ class ViajeTests(unittest.TestCase):
         self.assertEqual(viaje(self.red, "A", "C"), (2, [("T1", "A", "C")]))
         self.assertIsNone(viaje(self.red, "A", "D"))
         self.assertIsNone(viaje(self.red, "B", "B"))
-        self.assertEqual(viaje(self.red, "A", "A"), (0, []))
+        self.assertEqual(viaje(self.red, "A", "A"), ("DIRECTO", 0, []))
 
     def test_transbordo_mas_corto_con_ocurrencias_repetidas(self):
         red = RedPrueba([
@@ -52,7 +52,7 @@ class ViajeTests(unittest.TestCase):
             ("T2", ["D", "B", "D"]),
         ])
         self.assertEqual(viaje(red, "A", "D"), (
-            2, [("T1", "A", "B"), ("T2", "B", "D")],
+            "TRANSBORDO", 2, [("T1", "A", "B"), ("T2", "B", "D")],
         ))
 
     def test_desempates_y_limite_de_transbordos(self):
@@ -62,7 +62,7 @@ class ViajeTests(unittest.TestCase):
             ("T0", ["A", "B"]),
             ("T1", ["B", "C"]),
         ])
-        self.assertEqual(viaje(red, "A", "C"), (2, [("Y", "A", "C")]))
+        self.assertEqual(viaje(red, "A", "C"), ("DIRECTO", 2, [("Y", "A", "C")]))
         red = RedPrueba([
             ("T0", ["A", "B"]), ("T1", ["B", "C"]), ("T2", ["C", "D"]),
         ])
