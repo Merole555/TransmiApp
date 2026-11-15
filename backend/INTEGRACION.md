@@ -1,62 +1,127 @@
-# Integración de viajes
+# Integracion de Member 2: R4, R5, R6 y FastAPI
 
-Contrato provisional para revisión con los miembros 1, 3 y 4. Las firmas
-públicas de `Red` conservan los parámetros de la diapositiva 10.
+> Contratos provisionales acordados por el grupo. No modificar las firmas
+> publicas que evalua el profesor. Los algoritmos R1-R10 viven en `motor/`.
 
-- Carga (miembro 1): `viajes.indexar_horarios(tabla, filas)` recibe una tabla
-  hash propia vacía con `obtener(clave)` (devuelve `None` si falta) y
-  `asignar(clave, valor)`. La clave es la tupla `(ruta, estacion)`. Las filas
-  de horarios ya pasaron la validación de referencias del cargador. El resultado
-  se guarda como `red.horarios`; conserva todos los pasos fuente.
-- Operaciones (miembro 3): `red.tiene_parada(ruta, estacion)` consulta el índice
-  vigente de ocurrencias con búsqueda hash promedio. Una pareja con varias
-  ocurrencias está activa mientras conserve alguna. Editar y deshacer cambian
-  este índice; cerrar y reabrir cambian `red.estado(estacion)`.
-- `Red.proximo_bus(estacion, ruta, hora)` delega a
-  `viajes.proximo_bus(self, estacion, ruta, hora)`.
-- R4 usa mergesort al cargar y búsqueda binaria de límite inferior al consultar.
-  Con H horarios para el par, ordenar cuesta O(H log H), almacenar cuesta O(H)
-  y consultar cuesta O(log H) más las búsquedas hash promedio. Un recorrido de
-  la lista de horarios por consulta crecería linealmente con H.
+## Pendiente compartido: Red
 
-## R5 y R6
+En esta rama aun no existe la clase publica `Red` ni la carga de los tres CSV.
+`motor/__init__.py` esta vacio. Los tests de Member 2 usan dobles independientes,
+por lo que NO demuestran que la aplicacion completa se pueda iniciar con datos
+reales. Member 1 debe integrar el cargador y exponer `Red(carpeta)` desde
+`motor/__init__.py`; Member 3 debe integrar mutaciones e historial.
 
-- `red.salidas(nombre)` itera pares `(ruta, nodo)` de todas las ocurrencias
-  vigentes de una estación mediante el índice estación → rutas y ocurrencias.
-  Cada nodo expone `estacion` (nombre) y `siguiente` (nodo o `None`).
-  La iteración incluye ocurrencias de estaciones cerradas. La consulta verifica
-  la apertura en los puntos de abordaje, descenso y transbordo.
-- `Red.viaje(origen, destino)` delega a `viajes.viaje`. Recorre nodos hacia
-  adelante y compara cada candidato con el mejor según saltos, tramos y orden
-  lexicográfico. Con I ocurrencias del origen, P paradas por ruta como máximo y
-  C ocurrencias candidatas por punto de cambio como máximo, la cota es
-  O(I·P·(1 + C·P)), considerando acceso promedio al índice y comparaciones
-  de nombres de costo constante. No requiere construir un grafo por consulta.
-- `red.indice_ranking` es `RankingEstaciones(tabla, arbol, red.horarios)`.
-  La tabla es propia y está vacía. El árbol balanceado compartido acepta claves
-  ordenables y expone `insertar(clave)`, `eliminar(clave)` y `ascendente()`
-  como iterador perezoso desde la menor clave.
-- Al cargar, registrar cada estación una vez con `registrar(nombre)` y luego
-  activar cada pareja ruta-estación una vez con `cambiar_membresia`. El cargador
-  conserva las filas de horarios aun cuando una edición retire su parada.
-- R7–R9 llaman `cambiar_membresia(ruta, estacion, activa)` al pasar entre
-  cero y una o más ocurrencias. Llaman `cambiar_apertura(nombre, abierta)`
-  al cambiar la disponibilidad. Deshacer y rehacer siguen las mismas rutas
-  de actualización. El adaptador mantiene el bloqueo durante cada operación.
-- `Red.ranking(k)` delega a `viajes.ranking`. Las consultas cuestan
-  O(log n + k') para n abiertas y k' resultados. Cada cambio cuesta O(log n)
-  más búsquedas hash promedio. Mantener el orden en el árbol evita ordenar
-  las estaciones en cada consulta.
+Se espera que el objeto `Red` ofrezca estas propiedades/operaciones internas:
 
-## Adaptador HTTP
+- `red.horarios`: tabla hash propia con `obtener((ruta, estacion))` y
+  `asignar((ruta, estacion), lista_de_minutos)`. Se construye una vez con
+  `viajes.indexar_horarios(tabla, filas)`. Conservar los horarios duplicados.
+- `red.estado(nombre)`: devuelve `"ABIERTA"`, `"CERRADA"` o `"NO_EXISTE"`.
+- `red.tiene_parada(ruta, estacion)`: bool segun el recorrido vigente.
+  Tiene en cuenta las rutas editadas y las paradas repetidas.
+- `red.salidas(nombre)`: iterable de `(ruta, nodo)` para cada ocurrencia
+  vigente. Cada nodo expone `estacion` y `siguiente`; nunca recorrer
+  hacia atras para planificar el viaje.
+- `red.indice_ranking`: instancia de
+  `viajes.RankingEstaciones(tabla_de_estaciones, None, red.horarios)`.
+  `tabla_de_estaciones` debe ser tabla hash propia con
+  `obtener(nombre)` y `asignar(nombre, valor)`.
 
-- El miembro 4 puede usar /docs para revisar las rutas cuando el cargador esté
-  integrado. El adaptador normaliza nombres de estación y conserva los IDs de
-  ruta. Devuelve HTTP 200 para ausencias y cambios sin efecto y 422 para
-  entradas inválidas.
-- Se propone scripts.benchmark.ejecutar_web(salida), que devuelve el objeto
-  JSON que escribe de forma atómica en la ruta indicada. Debe usar redes
-  temporales propias. La API limita las mediciones a una por proceso y responde
-  503 mientras el módulo de medición no esté disponible.
-- La app usa una Red por proceso, con un bloqueo para consultas y cambios.
-  La medición tiene su propio bloqueo. Las pruebas inyectan la red y el arnés.
+Las funciones publicas delegan sin cambiar nombres ni parametros:
+
+```python
+def proximo_bus(self, estacion, ruta, hora):
+    return viajes.proximo_bus(self, estacion, ruta, hora)
+
+def viaje(self, origen, destino):
+    return viajes.viaje(self, origen, destino)
+
+def ranking(self, k):
+    return viajes.ranking(self, k)
+```
+
+## R4: proximo bus
+
+- `indexar_horarios(tabla, filas)` guarda minutos por pareja
+  `(ruta, estacion)`, ordenados mediante mergesort propio.
+- `proximo_bus` exige estacion abierta y pareja presente en ruta.
+- Convierte `HH:MM` a minutos, aceptando horas extendidas de dos digitos
+  (ejemplo: 25:10). Los minutos deben ser de 00 a 59.
+- Retorna primer paso `>=` hora consultada como texto `HH:MM`, o `None`.
+- Consulta `O(log H)` tras cargar el indice; preprocesamiento de
+  cada lista `O(H log H)`.
+
+## R5: viaje
+
+- `None` si no existe un plan valido con cero o un transbordo.
+- Caso trivial con la misma estacion abierta:
+  `("DIRECTO", 0, [])`.
+- Viaje directo: `("DIRECTO", saltos, [(ruta, subir, bajar)])`.
+- Con transbordo:
+  `("TRANSBORDO", saltos, [(r1, origen, cambio), (r2, cambio, destino)])`.
+- Se minimizan saltos entre paradas consecutivas. Con empate, gana
+  el menor numero de transbordos y luego el orden alfabetico de las
+  tuplas de tramos. No se puede subir/bajar/transbordar en estacion cerrada.
+  Se puede pasar por una parada cerrada sin bajar.
+- Orden de la ruta siempre hacia adelante, inclusive en repetidas
+  ocurrencias de una estacion.
+- El profesor no evalua escalamiento de R5, pero si su correccion.
+
+## R6: ranking
+
+- `ranking(k)` retorna `[(estacion, buses), ...]` para estaciones
+  abiertas, ordenado por cantidad descendente y nombre ascendente.
+- El conteo equivale al numero de filas de horarios de parejas
+  ruta-estacion **activas**. Si una ruta deja de contener la parada,
+  se retira su contribucion. No inventar horarios para paradas nuevas.
+- `RankingEstaciones.registrar(nombre)` registra conteo cero.
+- `cambiar_membresia(ruta, estacion, activa)` recibe solamente transiciones
+  entre una y cero ocurrencias de esa pareja y ajusta las contribuciones.
+- `cambiar_apertura(estacion, abierta)` oculta o muestra estaciones sin
+  perder el conteo acumulado. Undo/redo debe llamar los mismos cambios.
+- Estructura aprobada: arreglo ordenado de claves `(-buses, nombre)`
+  con busqueda binaria propia. Consulta `O(k)`; insertar/quitar
+  una clave cuesta `O(n)` por desplazamiento del arreglo, aunque
+  encontrar su posicion cueste `O(log n)`. Este costo real se
+  debe documentar y medir en R11; NO afirmar actualizaciones `O(log n)`.
+
+## API HTTP
+
+El adaptador `backend/main.py` contiene la serializacion JSON y
+validacion (estas librerias si estan permitidas fuera de `motor/`).
+`crear_app` admite inyectar un objeto Red para pruebas.
+
+| Metodo | Ruta | Respuesta |
+|---|---|---|
+| GET | /api/salud | `{"ok":true}` |
+| GET | /api/estado | `{"existe":true,"abierta":true}` |
+| GET | /api/autocompletar | `{"estaciones":["A"]}` |
+| GET | /api/rango | `{"estaciones":["A","B"]}` |
+| GET | /api/proximo-bus | `{"hora":"25:10"}` o `{"hora":null}` |
+| GET | /api/viaje | `{"viaje":{"tipo":"DIRECTO","saltos":2,"tramos":[...]}}` o null |
+| GET | /api/ranking | `{"ranking":[{"estacion":"A","buses":3}]}` |
+| GET | /api/recorrido | `{"estaciones":["A","B"]}` |
+| POST | /api/paradas/agregar | `{"cambio":true}` |
+| POST | /api/paradas/quitar | `{"cambio":true}` |
+| POST | /api/cerrar | `{"cambio":true}` |
+| POST | /api/reabrir | `{"cambio":true}` |
+| POST | /api/deshacer | `{"cambio":true}` |
+| POST | /api/rehacer | `{"cambio":true}` |
+| POST | /api/simular-fila | `{"esperas":[0,2],"espera_total":2,"espera_promedio":1.0,"espera_maxima":2}` |
+| GET | /api/rendimiento | JSON medido guardado, o HTTP 404 |
+
+R11 utiliza mediciones reproducibles hechas fuera del servidor, no POST
+para lanzar benchmarks desde la web. La interfaz React lee el JSON
+guardado desde `GET /api/rendimiento`.
+
+## Verificacion
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+.\.venv\Scripts\python.exe -m unittest discover -s scripts/pruebas -p "test_*.py" -v
+.\.venv\Scripts\python.exe -m compileall -q motor backend scripts/pruebas
+```
+
+Las pruebas actuales verifican R4-R6 y HTTP contra dobles. Faltan pruebas
+de integracion con `Red` y CSV reales una vez que Member 1 y 3
+incorporen el cargador, las estructuras y las mutaciones.
