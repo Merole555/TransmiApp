@@ -131,4 +131,10 @@ class ApiTests(unittest.TestCase):
         datos = {"operaciones": []}
         self.archivo.write_text(json.dumps(datos), encoding="utf-8")
         self.assertEqual(self.client.get(url).json(), datos)
+        self.assertEqual(self.client.post(url).status_code, 405)    def test_rendimiento_guardado(self):
+        url = "/api/rendimiento"
+        self.assertEqual(self.client.get(url).status_code, 404)
+        datos = {"operaciones": []}
+        self.archivo.write_text(json.dumps(datos), encoding="utf-8")
+        self.assertEqual(self.client.get(url).json(), datos)
         self.assertEqual(self.client.post(url).status_code, 405)
