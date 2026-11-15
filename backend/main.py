@@ -50,27 +50,14 @@ def _simular(llegadas, frecuencia, capacidad):
     return simular_fila(llegadas, frecuencia, capacidad)
 
 
-def _medir(salida):
-    try:
-        from scripts.benchmark import ejecutar_web
-    except ModuleNotFoundError as error:
-        if error.name not in ("scripts", "scripts.benchmark"):
-            raise
-        raise HTTPException(503, "El arnés de rendimiento aún no está disponible") from error
-
-    return ejecutar_web(salida)
-
-
 def crear_app(
     carpeta_datos=RAIZ / "datos",
     *,
     crear_red=_crear_red,
     simular_fila=_simular,
-    medir=_medir,
     archivo_resultados=RAIZ / "scripts" / "resultados" / "rendimiento.json",
 ):
     bloqueo_red = Lock()
-    bloqueo_medicion = Lock()
     resultados = Path(archivo_resultados)
 
     @asynccontextmanager
@@ -97,8 +84,8 @@ def crear_app(
 
     @aplicacion.get("/api/estado")
     def estado(nombre: str):
-        existe, abierta = consultar("estado", _nombre(nombre))
-        return {"existe": existe, "abierta": abierta}
+        situacion = consultar("estado", _nombre(nombre))
+        return {"existe": situacion != "NO_EXISTE", "abierta": situacion == "ABIERTA"}
 
     @aplicacion.get("/api/autocompletar")
     def autocompletar(prefijo: str, k: int):
@@ -117,8 +104,9 @@ def crear_app(
         plan = consultar("viaje", _nombre(origen), _nombre(destino))
         if plan is None:
             return {"viaje": None}
-        saltos, tramos = plan
+        tipo, saltos, tramos = plan
         return {"viaje": {
+            "tipo": tipo,
             "saltos": saltos,
             "tramos": [
                 {"ruta": ruta, "sube": sube, "baja": baja}
@@ -165,17 +153,15 @@ def crear_app(
 
     @aplicacion.post("/api/simular-fila")
     def fila(entrada: Fila):
-        abordajes, total, promedio, maxima = simular_fila(
+        esperas = simular_fila(
             entrada.llegadas, entrada.frecuencia, entrada.capacidad,
         )
+        total = sum(esperas)
         return {
-            "abordajes": [
-                {"indice_original": indice, "llegada": llegada, "salida": salida}
-                for indice, llegada, salida in abordajes
-            ],
+            "esperas": esperas,
             "espera_total": total,
-            "espera_promedio": promedio,
-            "espera_maxima": maxima,
+            "espera_promedio": total / len(esperas) if esperas else 0.0,
+            "espera_maxima": max(esperas) if esperas else 0,
         }
 
     @aplicacion.get("/api/rendimiento")
@@ -185,15 +171,6 @@ def crear_app(
                 return json.load(archivo)
         except FileNotFoundError as error:
             raise HTTPException(404, "No hay resultados de rendimiento") from error
-
-    @aplicacion.post("/api/rendimiento")
-    def medir_rendimiento():
-        if not bloqueo_medicion.acquire(blocking=False):
-            raise HTTPException(409, "Ya hay una medición en curso")
-        try:
-            return medir(resultados)
-        finally:
-            bloqueo_medicion.release()
 
     return aplicacion
 
