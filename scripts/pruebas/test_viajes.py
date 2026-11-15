@@ -17,12 +17,13 @@ class ProximoBusTests(unittest.TestCase):
             ("T1", "B", "08:05"),
             ("T1", "B", "00:00"),
             ("T2", "B", "08:12"),
+            ("T3", "B", "25:10"),
         ])
         self.abiertas = {"A", "B"}
-        self.paradas = {("T1", "A"), ("T1", "B"), ("T2", "B")}
+        self.paradas = {("T1", "A"), ("T1", "B"), ("T2", "B"), ("T3", "B")}
         self.red = SimpleNamespace(
             horarios=horarios,
-            estado=lambda nombre: (nombre in {"A", "B"}, nombre in self.abiertas),
+            estado=lambda nombre: ("NO_EXISTE" if nombre not in {"A", "B"} else ("ABIERTA" if nombre in self.abiertas else "CERRADA")),
             tiene_parada=lambda ruta, nombre: (ruta, nombre) in self.paradas,
         )
 
@@ -34,6 +35,11 @@ class ProximoBusTests(unittest.TestCase):
         ]:
             with self.subTest(consulta=consulta):
                 self.assertEqual(proximo_bus(self.red, "B", "T1", consulta), esperada)
+
+    def test_hora_extendida(self):
+        self.assertEqual(proximo_bus(self.red, "B", "T3", "24:30"), "25:10")
+        self.assertEqual(proximo_bus(self.red, "B", "T3", "25:10"), "25:10")
+        self.assertIsNone(proximo_bus(self.red, "B", "T3", "25:11"))
 
     def test_ausencias(self):
         for estacion, ruta, hora in [
@@ -53,6 +59,6 @@ class ProximoBusTests(unittest.TestCase):
         self.assertEqual(proximo_bus(self.red, "B", "T1", "08:05"), "08:05")
 
     def test_hora_invalida_aun_si_no_hay_estacion(self):
-        for hora in ("8:05", "24:00", "08:60", "08-05", "０８:０５", None):
+        for hora in ("8:05", "08:60", "100:00", "08-05", "０８:０５", None):
             with self.subTest(hora=hora), self.assertRaises(ValueError):
                 proximo_bus(self.red, "X", "T1", hora)
