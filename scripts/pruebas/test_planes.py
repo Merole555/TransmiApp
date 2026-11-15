@@ -40,7 +40,7 @@ class ViajeTests(unittest.TestCase):
 
     def test_cerrada_cuenta_como_salto(self):
         self.red.abiertas.remove("B")
-        self.assertEqual(viaje(self.red, "A", "C"), (2, [("T1", "A", "C")]))
+        self.assertEqual(viaje(self.red, "A", "C"), ("DIRECTO", 2, [("T1", "A", "C")]))
         self.assertIsNone(viaje(self.red, "A", "D"))
         self.assertIsNone(viaje(self.red, "B", "B"))
         self.assertEqual(viaje(self.red, "A", "A"), ("DIRECTO", 0, []))
@@ -69,28 +69,13 @@ class ViajeTests(unittest.TestCase):
         self.assertIsNone(viaje(red, "A", "D"))
 
 
-class ArbolPrueba:
-    def __init__(self):
-        self.claves = set()
-
-    def insertar(self, clave):
-        assert clave not in self.claves
-        self.claves.add(clave)
-
-    def eliminar(self, clave):
-        self.claves.remove(clave)
-
-    def ascendente(self):
-        return iter(sorted(self.claves))
-
-
 class RankingTests(unittest.TestCase):
     def test_conteos_empates_y_mutaciones(self):
         horarios = indexar_horarios(TablaPrueba(), [
             ("T1", "A", "08:00"), ("T1", "B", "08:01"),
             ("T2", "B", "08:02"), ("T2", "B", "08:02"),
         ])
-        indice = RankingEstaciones(TablaPrueba(), ArbolPrueba(), horarios)
+        indice = RankingEstaciones(TablaPrueba(), None, horarios)
         for estacion in ("A", "B", "C"):
             indice.registrar(estacion)
         for ruta, estacion in (("T1", "A"), ("T1", "B"), ("T2", "B")):
