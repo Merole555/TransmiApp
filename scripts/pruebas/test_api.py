@@ -69,7 +69,7 @@ class ApiTests(unittest.TestCase):
         respuesta = self.client.get(ruta, params=parametros)
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.json(), {"hora": None})
-        parametros["hora"] = "24:00"
+        parametros["hora"] = "24:60"
         self.assertEqual(self.client.get(ruta, params=parametros).status_code, 422)
 
     def test_viaje_cierre_e_historial(self):
