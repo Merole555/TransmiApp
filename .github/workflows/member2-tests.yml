@@ -1,0 +1,25 @@
+name: Member 2 Python checks
+on:
+  push:
+    branches:
+      - m2/api-http
+  pull_request:
+    paths:
+      - "motor/viajes.py"
+      - "backend/**"
+      - "scripts/pruebas/**"
+      - ".github/workflows/member2-tests.yml"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Run Member 2 unit and API tests
+        run: python -m unittest discover -s scripts/pruebas -p "test_*.py" -v
+      - name: Validate Python syntax
+        run: python -m compileall -q motor backend scripts/pruebas
