@@ -1,9 +1,7 @@
 import json
 import unittest
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Event
 from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
@@ -38,20 +36,13 @@ class ApiTests(unittest.TestCase):
         self.motor.agregar_parada.return_value = True
         self.motor.quitar_parada.return_value = False
         self.crear_red = Mock(return_value=self.motor)
-        self.simular = Mock(return_value=([(0, 0, 0)], 0, 0.0, 0))
-        self.medir = Mock(side_effect=self._medir)
+        self.simular = Mock(return_value=[0])
         app = crear_app(
             carpeta, crear_red=self.crear_red, simular_fila=self.simular,
-            medir=self.medir, archivo_resultados=self.archivo,
+            archivo_resultados=self.archivo,
         )
         self.client = self.enterContext(TestClient(app))
         self.crear_red.assert_called_once_with(carpeta)
-
-    @staticmethod
-    def _medir(salida):
-        datos = {"operaciones": []}
-        salida.write_text(json.dumps(datos), encoding="utf-8")
-        return datos
 
     def test_consultas_de_estaciones(self):
         self.assertEqual(self.client.get("/api/salud").json(), {"ok": True})
@@ -88,9 +79,9 @@ class ApiTests(unittest.TestCase):
             return respuesta.json()["viaje"]
 
         self.assertEqual(plan("á", "c"), {
-            "saltos": 2, "tramos": [{"ruta": "t1", "sube": "A", "baja": "C"}],
+            "tipo": "DIRECTO", "saltos": 2, "tramos": [{"ruta": "t1", "sube": "A", "baja": "C"}],
         })
-        esperado = {"saltos": 2, "tramos": [
+        esperado = {"tipo": "TRANSBORDO", "saltos": 2, "tramos": [
             {"ruta": "t1", "sube": "A", "baja": "B"},
             {"ruta": "T2", "sube": "B", "baja": "D"},
         ]}
@@ -127,33 +118,17 @@ class ApiTests(unittest.TestCase):
         url = "/api/simular-fila"
         entrada = {"llegadas": [0], "frecuencia": 4, "capacidad": 2}
         self.assertEqual(self.client.post(url, json=entrada).json(), {
-            "abordajes": [{"indice_original": 0, "llegada": 0, "salida": 0}],
+            "esperas": [0],
             "espera_total": 0, "espera_promedio": 0.0, "espera_maxima": 0,
         })
         entrada["capacidad"] = True
         self.assertEqual(self.client.post(url, json=entrada).status_code, 422)
         self.simular.assert_called_once_with([0], 4, 2)
 
-    def test_rendimiento_ausente_guardado_y_en_curso(self):
+    def test_rendimiento_guardado(self):
         url = "/api/rendimiento"
         self.assertEqual(self.client.get(url).status_code, 404)
-        iniciada = Event()
-        continuar = Event()
-
-        def medicion(salida):
-            iniciada.set()
-            if not continuar.wait(5):
-                raise TimeoutError("La prueba no liberó la medición")
-            return self._medir(salida)
-
-        self.medir.side_effect = medicion
-        with ThreadPoolExecutor(max_workers=1) as ejecutor:
-            trabajo = ejecutor.submit(self.client.post, url)
-            try:
-                self.assertTrue(iniciada.wait(5))
-                self.assertEqual(self.client.post(url).status_code, 409)
-                self.assertEqual(self.client.get("/api/ranking?k=1").status_code, 200)
-            finally:
-                continuar.set()
-            self.assertEqual(trabajo.result().json(), {"operaciones": []})
-        self.assertEqual(self.client.get(url).json(), {"operaciones": []})
+        datos = {"operaciones": []}
+        self.archivo.write_text(json.dumps(datos), encoding="utf-8")
+        self.assertEqual(self.client.get(url).json(), datos)
+        self.assertEqual(self.client.post(url).status_code, 405)
