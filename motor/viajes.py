@@ -73,3 +73,102 @@ def proximo_bus(red, estacion, ruta, hora):
         return None
     horas, resto = divmod(minutos[inicio], 60)
     return f"{horas:02d}:{resto:02d}"
+
+
+def viaje(red, origen, destino):
+    if not red.estado(origen)[1] or not red.estado(destino)[1]:
+        return None
+    if origen == destino:
+        return 0, []
+
+    mejor = None
+    for ruta, salida in red.salidas(origen):
+        nodo = salida.siguiente
+        saltos = 1
+        while nodo is not None:
+            if mejor is not None and saltos > mejor[0]:
+                break
+            nombre = nodo.estacion
+            tramo = (ruta, origen, nombre)
+            if nombre == destino:
+                candidato = (saltos, 1, (tramo,))
+                if mejor is None or candidato < mejor:
+                    mejor = candidato
+                break
+            if red.estado(nombre)[1] and (mejor is None or saltos < mejor[0]):
+                mejor = _evaluar_transbordos(red, tramo, destino, saltos, mejor)
+            nodo = nodo.siguiente
+            saltos += 1
+
+    if mejor is None:
+        return None
+    return mejor[0], list(mejor[2])
+
+
+def _evaluar_transbordos(red, tramo, destino, saltos, mejor):
+    ruta, _, cambio = tramo
+    for otra_ruta, salida in red.salidas(cambio):
+        if otra_ruta == ruta:
+            continue
+        nodo = salida.siguiente
+        total = saltos + 1
+        while nodo is not None and (mejor is None or total <= mejor[0]):
+            if nodo.estacion == destino:
+                candidato = (total, 2, (tramo, (otra_ruta, cambio, destino)))
+                if mejor is None or candidato < mejor:
+                    mejor = candidato
+                break
+            nodo = nodo.siguiente
+            total += 1
+    return mejor
+
+
+class RankingEstaciones:
+    """Mantiene el conteo activo y las claves ordenadas de las abiertas."""
+
+    def __init__(self, estaciones, abiertas, horarios):
+        self._estaciones = estaciones
+        self._abiertas = abiertas
+        self._horarios = horarios
+
+    def registrar(self, estacion):
+        self._estaciones.asignar(estacion, (0, True))
+        self._abiertas.insertar((0, estacion))
+
+    def cambiar_apertura(self, estacion, abierta):
+        cantidad, anterior = self._estaciones.obtener(estacion)
+        if abierta == anterior:
+            return
+        clave = (-cantidad, estacion)
+        if abierta:
+            self._abiertas.insertar(clave)
+        else:
+            self._abiertas.eliminar(clave)
+        self._estaciones.asignar(estacion, (cantidad, abierta))
+
+    def cambiar_membresia(self, ruta, estacion, activa):
+        """Recibe únicamente transiciones efectivas de la pareja completa."""
+        minutos = self._horarios.obtener((ruta, estacion))
+        if not minutos:
+            return
+        cantidad, abierta = self._estaciones.obtener(estacion)
+        if abierta:
+            self._abiertas.eliminar((-cantidad, estacion))
+        cantidad += len(minutos) if activa else -len(minutos)
+        self._estaciones.asignar(estacion, (cantidad, abierta))
+        if abierta:
+            self._abiertas.insertar((-cantidad, estacion))
+
+    def consultar(self, k):
+        resultado = []
+        if k <= 0:
+            return resultado
+        for negativo, estacion in self._abiertas.ascendente():
+            resultado.append((estacion, -negativo))
+            if len(resultado) == k:
+                break
+        return resultado
+
+
+def ranking(red, k):
+    return red.indice_ranking.consultar(k)
