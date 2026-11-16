@@ -1,49 +1,62 @@
-# Integración de viajes
+# Integración de miembro 2 (contratos aprobados)
 
-Contrato provisional para revisión con los miembros 1, 3 y 4. Las firmas
-públicas de `Red` conservan los parámetros de la diapositiva 10.
+Esta rama contiene R4, R5, R6 y adaptador FastAPI. No incluye aún la
+implementación real de `Red`, el cargador CSV ni `simular_fila`; pertenecen
+a la integración con los demás miembros. Las pruebas HTTP usan dobles.
 
-- Carga (miembro 1): `viajes.indexar_horarios(tabla, filas)` recibe una tabla
-  hash propia vacía con `obtener(clave)` (devuelve `None` si falta) y
-  `asignar(clave, valor)`. La clave es la tupla `(ruta, estacion)`. Las filas
-  de horarios ya pasaron la validación de referencias del cargador. El resultado
-  se guarda como `red.horarios`; conserva todos los pasos fuente.
-- Operaciones (miembro 3): `red.tiene_parada(ruta, estacion)` consulta el índice
-  vigente de ocurrencias con búsqueda hash promedio. Una pareja con varias
-  ocurrencias está activa mientras conserve alguna. Editar y deshacer cambian
-  este índice; cerrar y reabrir cambian `red.estado(estacion)`.
-- `Red.proximo_bus(estacion, ruta, hora)` delega a
-  `viajes.proximo_bus(self, estacion, ruta, hora)`.
-- R4 usa mergesort al cargar y búsqueda binaria de límite inferior al consultar.
-  Con H horarios para el par, ordenar cuesta O(H log H), almacenar cuesta O(H)
-  y consultar cuesta O(log H) más las búsquedas hash promedio. Un recorrido de
-  la lista de horarios por consulta crecería linealmente con H.
+## R1 y R4
 
-## R5 y R6
+`red.estado(nombre)` devuelve `"ABIERTA"`, `"CERRADA"` o `"NO_EXISTE"`.
+`red.tiene_parada(ruta, estacion)` devuelve Booleano para una pareja vigente.
+`red.horarios` es una tabla hash propia con `obtener` y `asignar`.
+`viajes.indexar_horarios(tabla, filas)` recibe tuplas `(ruta, estacion, HH:MM)`,
+con horas GTFS extendidas de 00 a 99. Ordena los minutos con mergesort propio;
+`viajes.proximo_bus(red, estacion, ruta, hora)` usa búsqueda binaria y devuelve
+`HH:MM` o `None`.
 
-- `red.salidas(nombre)` itera pares `(ruta, nodo)` de todas las ocurrencias
-  vigentes de una estación mediante el índice estación → rutas y ocurrencias.
-  Cada nodo expone `estacion` (nombre) y `siguiente` (nodo o `None`).
-  La iteración incluye ocurrencias de estaciones cerradas. La consulta verifica
-  la apertura en los puntos de abordaje, descenso y transbordo.
-- `Red.viaje(origen, destino)` delega a `viajes.viaje`. Recorre nodos hacia
-  adelante y compara cada candidato con el mejor según saltos, tramos y orden
-  lexicográfico. Con I ocurrencias del origen, P paradas por ruta como máximo y
-  C ocurrencias candidatas por punto de cambio como máximo, la cota es
-  O(I·P·(1 + C·P)), considerando acceso promedio al índice y comparaciones
-  de nombres de costo constante. No requiere construir un grafo por consulta.
-- `red.indice_ranking` es `RankingEstaciones(tabla, arbol, red.horarios)`.
-  La tabla es propia y está vacía. El árbol balanceado compartido acepta claves
-  ordenables y expone `insertar(clave)`, `eliminar(clave)` y `ascendente()`
-  como iterador perezoso desde la menor clave.
-- Al cargar, registrar cada estación una vez con `registrar(nombre)` y luego
-  activar cada pareja ruta-estación una vez con `cambiar_membresia`. El cargador
-  conserva las filas de horarios aun cuando una edición retire su parada.
-- R7–R9 llaman `cambiar_membresia(ruta, estacion, activa)` al pasar entre
-  cero y una o más ocurrencias. Llaman `cambiar_apertura(nombre, abierta)`
-  al cambiar la disponibilidad. Deshacer y rehacer siguen las mismas rutas
-  de actualización. El adaptador mantiene el bloqueo durante cada operación.
-- `Red.ranking(k)` delega a `viajes.ranking`. Las consultas cuestan
-  O(log n + k') para n abiertas y k' resultados. Cada cambio cuesta O(log n)
-  más búsquedas hash promedio. Mantener el orden en el árbol evita ordenar
-  las estaciones en cada consulta.
+## R5
+
+`red.salidas(nombre)` entrega pares `(ruta, nodo)` por cada ocurrencia
+vigente. Cada nodo expone `estacion` y `siguiente`. La búsqueda solo avanza
+en el sentido de la ruta, permite máximo un transbordo, no usa estaciones
+cerradas para subir, bajar ni transbordar, y sí puede atravesarlas a bordo.
+`viajes.viaje` devuelve `None` o
+`(tipo, saltos, tramos)`, donde `tipo` es `"DIRECTO"` o
+`"TRANSBORDO"` y `tramos` es una lista de
+`(ruta, origen_del_tramo, destino_del_tramo)`.
+
+## R6
+
+`red.indice_ranking = viajes.RankingEstaciones(tabla, None, red.horarios)`.
+La tabla es propia y está vacía. El segundo argumento se conserva únicamente
+por compatibilidad con el adaptador previo; **no se necesita AVL**.
+Registrar estaciones con `registrar(nombre)`; activar una pareja ruta-estación
+una vez mediante `cambiar_membresia(ruta, estacion, True)`. Las operaciones,
+deshacer y rehacer notifican transiciones efectivas de membresía y apertura.
+Se mantiene un arreglo ordenado de claves `(-buses, estacion)`, con inserción
+y eliminación por búsqueda binaria manual. Consultar los primeros k cuesta
+O(k); cada actualización cuesta O(n) por desplazamiento del arreglo.
+
+## API y R10
+
+`crear_app` construye la aplicación y acepta inyección de `crear_red` y
+`simular_fila` para pruebas. En ejecución real, importa ambos desde
+`motor`. La API convierte `estado` a `{existe, abierta}`; el viaje a
+`{viaje: {tipo, saltos, tramos}}`; la simulación recibe una lista de
+esperas por persona y expone `esperas`, total, promedio y máximo.
+Los errores de validación son HTTP 422.
+
+## R11 y pendientes antes de integración final
+
+`GET /api/rendimiento` lee el JSON previamente generado por el arnés
+reproducible del miembro 4. No ejecuta benchmarks durante solicitudes HTTP.
+El panel de un solo gráfico y el script de benchmarks quedan pendientes
+hasta que el miembro 4 publique su implementación.
+
+**Bloqueantes para declarar el producto funcional:**
+1. Exportar `Red` y `simular_fila` en `motor/__init__.py`.
+2. Conectar el cargador de los tres CSV a horarios, salidas y ranking.
+3. Conectar R7-R9 y sus notificaciones de cambios/undo/redo.
+4. Incorporar el benchmark JSON reproducible y el frontend.
+5. Probar con la red real, además de los dobles, y revisar la guía original
+   del miembro 2 contra esta implementación.

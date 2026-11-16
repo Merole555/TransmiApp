@@ -11,8 +11,8 @@ def minuto_del_dia(hora):
         raise ValueError("La hora debe tener formato HH:MM")
     horas = int(hora[:2])
     minutos = int(hora[3:])
-    if horas >= 24 or minutos >= 60:
-        raise ValueError("La hora debe estar entre 00:00 y 23:59")
+    if minutos >= 60:
+        raise ValueError("La hora debe tener minutos entre 00 y 59")
     return horas * 60 + minutos
 
 
@@ -53,9 +53,14 @@ def indexar_horarios(tabla, filas):
     return tabla
 
 
+def _abierta(red, nombre):
+    """Comprueba el estado definido por el contrato público de R1."""
+    return red.estado(nombre) == "ABIERTA"
+
+
 def proximo_bus(red, estacion, ruta, hora):
     objetivo = minuto_del_dia(hora)
-    if not red.estado(estacion)[1] or not red.tiene_parada(ruta, estacion):
+    if not _abierta(red, estacion) or not red.tiene_parada(ruta, estacion):
         return None
     minutos = red.horarios.obtener((ruta, estacion))
     if not minutos:
@@ -76,10 +81,10 @@ def proximo_bus(red, estacion, ruta, hora):
 
 
 def viaje(red, origen, destino):
-    if not red.estado(origen)[1] or not red.estado(destino)[1]:
+    if not _abierta(red, origen) or not _abierta(red, destino):
         return None
     if origen == destino:
-        return 0, []
+        return "DIRECTO", 0, []
 
     mejor = None
     for ruta, salida in red.salidas(origen):
@@ -95,14 +100,14 @@ def viaje(red, origen, destino):
                 if mejor is None or candidato < mejor:
                     mejor = candidato
                 break
-            if red.estado(nombre)[1] and (mejor is None or saltos < mejor[0]):
+            if _abierta(red, nombre) and (mejor is None or saltos < mejor[0]):
                 mejor = _evaluar_transbordos(red, tramo, destino, saltos, mejor)
             nodo = nodo.siguiente
             saltos += 1
 
     if mejor is None:
         return None
-    return mejor[0], list(mejor[2])
+    return ("DIRECTO" if mejor[1] == 1 else "TRANSBORDO"), mejor[0], list(mejor[2])
 
 
 def _evaluar_transbordos(red, tramo, destino, saltos, mejor):
@@ -124,16 +129,39 @@ def _evaluar_transbordos(red, tramo, destino, saltos, mejor):
 
 
 class RankingEstaciones:
-    """Mantiene el conteo activo y las claves ordenadas de las abiertas."""
+    """Índice de ranking ordenado por (-buses, nombre), sin árbol externo.
+
+    Las consultas leen directamente la lista ordenada; cada edición actualiza
+    la clave afectada. Se usa búsqueda binaria manual para encontrar su lugar.
+    """
 
     def __init__(self, estaciones, abiertas, horarios):
         self._estaciones = estaciones
-        self._abiertas = abiertas
+        self._orden = []
         self._horarios = horarios
+
+    def _posicion(self, clave):
+        inicio = 0
+        fin = len(self._orden)
+        while inicio < fin:
+            medio = (inicio + fin) // 2
+            if self._orden[medio] < clave:
+                inicio = medio + 1
+            else:
+                fin = medio
+        return inicio
+
+    def _insertar(self, clave):
+        self._orden.insert(self._posicion(clave), clave)
+
+    def _quitar(self, clave):
+        posicion = self._posicion(clave)
+        if posicion < len(self._orden) and self._orden[posicion] == clave:
+            self._orden.pop(posicion)
 
     def registrar(self, estacion):
         self._estaciones.asignar(estacion, (0, True))
-        self._abiertas.insertar((0, estacion))
+        self._insertar((0, estacion))
 
     def cambiar_apertura(self, estacion, abierta):
         cantidad, anterior = self._estaciones.obtener(estacion)
@@ -141,32 +169,33 @@ class RankingEstaciones:
             return
         clave = (-cantidad, estacion)
         if abierta:
-            self._abiertas.insertar(clave)
+            self._insertar(clave)
         else:
-            self._abiertas.eliminar(clave)
+            self._quitar(clave)
         self._estaciones.asignar(estacion, (cantidad, abierta))
 
     def cambiar_membresia(self, ruta, estacion, activa):
-        """Recibe únicamente transiciones efectivas de la pareja completa."""
+        """Actualiza la contribución al pasar entre 0 y >=1 ocurrencias."""
         minutos = self._horarios.obtener((ruta, estacion))
         if not minutos:
             return
         cantidad, abierta = self._estaciones.obtener(estacion)
         if abierta:
-            self._abiertas.eliminar((-cantidad, estacion))
+            self._quitar((-cantidad, estacion))
         cantidad += len(minutos) if activa else -len(minutos)
         self._estaciones.asignar(estacion, (cantidad, abierta))
         if abierta:
-            self._abiertas.insertar((-cantidad, estacion))
+            self._insertar((-cantidad, estacion))
 
     def consultar(self, k):
         resultado = []
         if k <= 0:
             return resultado
-        for negativo, estacion in self._abiertas.ascendente():
+        indice = 0
+        while indice < len(self._orden) and len(resultado) < k:
+            negativo, estacion = self._orden[indice]
             resultado.append((estacion, -negativo))
-            if len(resultado) == k:
-                break
+            indice += 1
         return resultado
 
 
