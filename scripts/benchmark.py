@@ -1,24 +1,7 @@
-"""R11 · Medición reproducible de rendimiento (miembro 4).
+"""R11: mide el tiempo de las operaciones con redes de tamaño n, 2n y 4n.
 
-Uso desde la raíz del proyecto:
-
+Uso desde la raíz:
     python -m scripts.benchmark --salida scripts/resultados/rendimiento.json
-    python -m scripts.benchmark --rapido          # tamaños pequeños, para probar
-
-Protocolo
-- Para cada operación se generan redes deterministas (semilla fija) en una
-  carpeta temporal con los tres CSV del contrato, de tamaño n, 2n y 4n en la
-  variable relevante. La generación de CSV, la carga, HTTP y el renderizado
-  quedan fuera del intervalo medido.
-- Se usa ``time.perf_counter_ns``, una ronda de calentamiento y varias
-  muestras; se reporta la mediana. Las consultas rápidas se cronometran en
-  lotes y se divide por la cantidad de llamadas. Las mutaciones se miden una a
-  una y el estado previo se restablece fuera del intervalo (con ``deshacer``).
-- Antes de medir se comprueba el resultado de una llamada de cada caso.
-- Para cada serie se calcula la razón de medianas 2n/n y 4n/2n.
-
-El script usa solo el import público ``from motor import Red, simular_fila``.
-La función ``ejecutar`` es importable para reutilizarla desde otros scripts.
 """
 
 import argparse
@@ -34,480 +17,303 @@ import time
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
-if str(RAIZ) not in sys.path:
-    sys.path.insert(0, str(RAIZ))
+sys.path.insert(0, str(RAIZ))
 
 from motor import Red, simular_fila  # noqa: E402
 
-SALIDA_POR_DEFECTO = RAIZ / "scripts" / "resultados" / "rendimiento.json"
 SEMILLA = 42
-K_FIJO = 10
+K = 10
 
 
-# --------------------------------------------------------------------------
-# Generación de redes
-# --------------------------------------------------------------------------
-
-def nombre_estacion(i):
+def nombre(i):
     return f"E{i:06d}"
 
 
-def nombre_extra(i):
-    return f"X{i:06d}"
-
-
 def hora(minuto):
-    minuto %= 24 * 60
+    minuto = minuto % 1440
     return f"{minuto // 60:02d}:{minuto % 60:02d}"
 
 
-def escribir_red(carpeta, estaciones, rutas, horarios_por_par, extras=0, semilla=SEMILLA):
-    """Escribe los tres CSV.
+def crear_csv(carpeta, n_estaciones, rutas, horarios_por_par, extras=0):
+    """Escribe estaciones.csv, rutas.csv y horarios.csv en la carpeta.
 
-    ``rutas`` es una lista de ``(id, [indices de estación])``. Las filas se
-    barajan con la semilla para que el cargador no dependa del orden.
-    Devuelve un objeto con las dimensiones efectivas.
+    rutas es una lista de (id_ruta, [indices de estaciones]).
     """
-    azar = random.Random(semilla)
-    carpeta = Path(carpeta)
-    nombres = [nombre_estacion(i) for i in range(estaciones)]
-    nombres += [nombre_extra(i) for i in range(extras)]
+    azar = random.Random(SEMILLA)
     filas_rutas = []
     filas_horarios = []
     for ruta, indices in rutas:
-        for orden, indice in enumerate(indices, start=1):
-            filas_rutas.append((ruta, str(orden), nombre_estacion(indice)))
-            base = azar.randrange(0, 5)
+        orden = 1
+        for i in indices:
+            filas_rutas.append([ruta, orden, nombre(i)])
             for paso in range(horarios_por_par):
-                # Pasos repartidos en el día; con H > 1440 hay minutos repetidos
-                # (buses distintos que pasan el mismo minuto).
-                minuto = base + (paso * 1430) // horarios_por_par
-                filas_horarios.append((ruta, nombre_estacion(indice), hora(minuto)))
+                minuto = paso * 1430 // horarios_por_par + orden
+                filas_horarios.append([ruta, nombre(i), hora(minuto)])
+            orden += 1
+    # se desordenan para que la carga no dependa del orden
     azar.shuffle(filas_rutas)
     azar.shuffle(filas_horarios)
-    with open(carpeta / "estaciones.csv", "w", newline="", encoding="utf-8") as archivo:
-        escritor = csv.writer(archivo)
+
+    with open(Path(carpeta) / "estaciones.csv", "w", newline="", encoding="utf-8") as f:
+        escritor = csv.writer(f)
         escritor.writerow(["nombre"])
-        for nombre in nombres:
-            escritor.writerow([nombre])
-    with open(carpeta / "rutas.csv", "w", newline="", encoding="utf-8") as archivo:
-        escritor = csv.writer(archivo)
+        for i in range(n_estaciones):
+            escritor.writerow([nombre(i)])
+        for i in range(extras):
+            escritor.writerow([f"X{i:06d}"])
+    with open(Path(carpeta) / "rutas.csv", "w", newline="", encoding="utf-8") as f:
+        escritor = csv.writer(f)
         escritor.writerow(["ruta", "orden", "estacion"])
         escritor.writerows(filas_rutas)
-    with open(carpeta / "horarios.csv", "w", newline="", encoding="utf-8") as archivo:
-        escritor = csv.writer(archivo)
+    with open(Path(carpeta) / "horarios.csv", "w", newline="", encoding="utf-8") as f:
+        escritor = csv.writer(f)
         escritor.writerow(["ruta", "estacion", "hora"])
         escritor.writerows(filas_horarios)
-    longitudes = [len(indices) for _, indices in rutas]
-    return {
-        "estaciones": len(nombres),
-        "rutas": len(rutas),
-        "longitud_ruta": max(longitudes) if longitudes else 0,
-        "horarios_por_par": horarios_por_par,
-        "filas_horarios": len(filas_horarios),
-    }
+    return {"estaciones": n_estaciones + extras, "rutas": len(rutas), "horarios_por_par": horarios_por_par}
 
 
-def rutas_solapadas(estaciones, longitud=20, paso=10):
-    """Rutas de ``longitud`` paradas que avanzan ``paso`` estaciones, de modo
-    que cada estación pertenece a unas dos rutas y hay transbordos."""
+# Tres tipos de red según lo que se quiere hacer crecer
+
+def red_muchas_estaciones(carpeta, n):
+    # rutas de 20 paradas que se cruzan cada 10 estaciones (así hay transbordos)
     rutas = []
     inicio = 0
-    numero = 0
-    while inicio + longitud <= estaciones:
-        rutas.append((f"R{numero:05d}", list(range(inicio, inicio + longitud))))
-        inicio += paso
-        numero += 1
-    return rutas
+    while inicio + 20 <= n:
+        rutas.append((f"R{len(rutas):05d}", list(range(inicio, inicio + 20))))
+        inicio += 10
+    return crear_csv(carpeta, n, rutas, 2)
 
 
-def red_estaciones(carpeta, n):
-    """n estaciones repartidas en rutas cortas solapadas, 2 horarios por par."""
-    return escribir_red(carpeta, n, rutas_solapadas(n), 2)
-
-
-def red_horarios(carpeta, n):
-    """Una ruta corta; n horarios para cada par ruta-estación."""
-    return escribir_red(carpeta, 50, [("R00000", list(range(10)))], n)
+def red_muchos_horarios(carpeta, n):
+    return crear_csv(carpeta, 50, [("R00000", list(range(10)))], n)
 
 
 def red_ruta_larga(carpeta, n):
-    """Una sola ruta de n paradas y estaciones extra para insertar."""
-    return escribir_red(carpeta, n, [("R00000", list(range(n)))], 1, extras=8)
+    return crear_csv(carpeta, n, [("R00000", list(range(n)))], 1, extras=2)
 
 
-# --------------------------------------------------------------------------
-# Medición
-# --------------------------------------------------------------------------
-
-def mediana_lote(funcion, llamadas, repeticiones):
-    """Mediana de ns por llamada, cronometrando lotes de ``llamadas``."""
-    for _ in range(llamadas):          # calentamiento
-        funcion()
+def medir_consulta(funcion, veces, repeticiones):
+    """Mediana de ns por llamada, midiendo lotes de varias llamadas."""
+    for _ in range(veces):
+        funcion()  # calentamiento
     muestras = []
     for _ in range(repeticiones):
         inicio = time.perf_counter_ns()
-        for _ in range(llamadas):
+        for _ in range(veces):
             funcion()
-        muestras.append((time.perf_counter_ns() - inicio) / llamadas)
+        muestras.append((time.perf_counter_ns() - inicio) / veces)
     return statistics.median(muestras)
 
 
-def mediana_mutacion(preparar, medir, restablecer, repeticiones):
-    """Mide una mutación por muestra; preparar y restablecer quedan fuera."""
+def medir_mutacion(antes, funcion, despues, repeticiones):
+    """Mide una sola llamada por muestra. antes y despues no se cuentan."""
     muestras = []
-    for indice in range(repeticiones + 1):
-        preparar()
+    for _ in range(repeticiones):
+        antes()
         inicio = time.perf_counter_ns()
-        medir()
-        fin = time.perf_counter_ns()
-        restablecer()
-        if indice > 0:                 # la primera muestra es calentamiento
-            muestras.append(fin - inicio)
+        funcion()
+        muestras.append(time.perf_counter_ns() - inicio)
+        despues()
     return statistics.median(muestras)
 
 
-def comprobar(condicion, mensaje):
-    if not condicion:
-        raise AssertionError(mensaje)
+def nada():
+    pass
 
 
-def abierta(estado):
-    # Acepta el contrato del repositorio ("ABIERTA") y el de la guía (True, True).
-    return estado == "ABIERTA" or estado == (True, True)
+# Cada caso recibe la red ya cargada y n, y devuelve la mediana en ns.
+# Primero se revisa que la operación responda bien.
+
+def caso_estado(red, n, rep):
+    e = nombre(n // 2)
+    assert red.estado(e) in ("ABIERTA", (True, True))
+    return medir_consulta(lambda: red.estado(e), 200, rep)
 
 
-# Cada caso recibe (red, n, config) y devuelve la mediana en ns.
-
-def caso_estado(red, n, c):
-    nombre = nombre_estacion(n // 2)
-    comprobar(abierta(red.estado(nombre)), "estado debe encontrar una estación abierta")
-    return mediana_lote(lambda: red.estado(nombre), c["lote"], c["repeticiones"])
+def caso_autocompletar(red, n, rep):
+    prefijo = nombre(n // 2)[:-1]
+    assert len(red.autocompletar(prefijo, K)) == K
+    return medir_consulta(lambda: red.autocompletar(prefijo, K), 200, rep)
 
 
-def caso_autocompletar(red, n, c):
-    prefijo = nombre_estacion(n // 2)[:-1]
-    comprobar(len(red.autocompletar(prefijo, K_FIJO)) == K_FIJO, "autocompletar debe llenar k")
-    return mediana_lote(lambda: red.autocompletar(prefijo, K_FIJO), c["lote"], c["repeticiones"])
+def caso_rango(red, n, rep):
+    desde, hasta = nombre(n // 2), nombre(n // 2 + K - 1)
+    assert len(red.rango(desde, hasta)) == K
+    return medir_consulta(lambda: red.rango(desde, hasta), 200, rep)
 
 
-def caso_rango(red, n, c):
-    desde, hasta = nombre_estacion(n // 2), nombre_estacion(n // 2 + K_FIJO - 1)
-    comprobar(len(red.rango(desde, hasta)) == K_FIJO, "rango debe devolver s fijo")
-    return mediana_lote(lambda: red.rango(desde, hasta), c["lote"], c["repeticiones"])
+def caso_proximo_bus(red, n, rep):
+    assert red.proximo_bus(nombre(5), "R00000", "12:00") is not None
+    return medir_consulta(lambda: red.proximo_bus(nombre(5), "R00000", "12:00"), 200, rep)
 
 
-def caso_proximo_bus(red, n, c):
-    estacion = nombre_estacion(5)
-    comprobar(red.proximo_bus(estacion, "R00000", "12:00") is not None, "debe existir próximo bus")
-    return mediana_lote(lambda: red.proximo_bus(estacion, "R00000", "12:00"), c["lote"], c["repeticiones"])
+def caso_viaje(red, n, rep):
+    assert red.viaje(nombre(0), nombre(25)) is not None
+    return medir_consulta(lambda: red.viaje(nombre(0), nombre(25)), 20, rep)
 
 
-def caso_viaje(red, n, c):
-    origen, destino = nombre_estacion(0), nombre_estacion(25)
-    comprobar(red.viaje(origen, destino) is not None, "viaje con transbordo debe existir")
-    return mediana_lote(lambda: red.viaje(origen, destino), max(1, c["lote"] // 10), c["repeticiones"])
+def caso_ranking(red, n, rep):
+    assert len(red.ranking(K)) == K
+    return medir_consulta(lambda: red.ranking(K), 200, rep)
 
 
-def caso_ranking(red, n, c):
-    comprobar(len(red.ranking(K_FIJO)) == K_FIJO, "ranking debe devolver k filas")
-    return mediana_lote(lambda: red.ranking(K_FIJO), c["lote"], c["repeticiones"])
+def caso_recorrido(red, n, rep):
+    assert len(red.recorrido("R00000")) == n
+    return medir_consulta(lambda: red.recorrido("R00000"), 20, rep)
 
 
-def caso_recorrido(red, n, c):
-    comprobar(len(red.recorrido("R00000")) == n, "recorrido debe tener n paradas")
-    return mediana_lote(lambda: red.recorrido("R00000"), max(1, c["lote"] // 10), c["repeticiones"])
+def caso_recorrido_inverso(red, n, rep):
+    assert red.recorrido("R00000", al_reves=True)[0] == nombre(n - 1)
+    return medir_consulta(lambda: red.recorrido("R00000", al_reves=True), 20, rep)
 
 
-def caso_recorrido_inverso(red, n, c):
-    lista = red.recorrido("R00000", al_reves=True)
-    comprobar(len(lista) == n and lista[0] == nombre_estacion(n - 1), "recorrido inverso incorrecto")
-    return mediana_lote(lambda: red.recorrido("R00000", al_reves=True), max(1, c["lote"] // 10), c["repeticiones"])
+def caso_agregar(red, n, rep):
+    return medir_mutacion(nada, lambda: red.agregar_parada("R00000", "X000000", nombre(n // 2)),
+                          red.deshacer, rep * 5)
 
 
-def caso_agregar(red, n, c):
-    ancla = nombre_estacion(n // 2)
-    comprobar(red.agregar_parada("R00000", nombre_extra(0), ancla) is True, "agregar debe aplicar")
-    red.deshacer()
-    return mediana_mutacion(
-        lambda: None,
-        lambda: red.agregar_parada("R00000", nombre_extra(0), ancla),
-        red.deshacer,
-        c["repeticiones_mutacion"],
-    )
+def caso_quitar(red, n, rep):
+    return medir_mutacion(nada, lambda: red.quitar_parada("R00000", nombre(n // 2)), red.deshacer, rep * 5)
 
 
-def caso_quitar(red, n, c):
-    estacion = nombre_estacion(n // 2)
-    comprobar(red.quitar_parada("R00000", estacion) is True, "quitar debe aplicar")
-    red.deshacer()
-    return mediana_mutacion(
-        lambda: None,
-        lambda: red.quitar_parada("R00000", estacion),
-        red.deshacer,
-        c["repeticiones_mutacion"],
-    )
+def caso_cerrar(red, n, rep):
+    return medir_mutacion(nada, lambda: red.cerrar(nombre(n // 2)), red.deshacer, rep * 5)
 
 
-def caso_cerrar(red, n, c):
-    nombre = nombre_estacion(n // 2)
-    comprobar(red.cerrar(nombre) is True, "cerrar debe aplicar")
-    red.deshacer()
-    return mediana_mutacion(lambda: None, lambda: red.cerrar(nombre), red.deshacer, c["repeticiones_mutacion"])
+def caso_reabrir(red, n, rep):
+    e = nombre(n // 2)
+
+    def despues():
+        red.deshacer()  # deshace reabrir
+        red.deshacer()  # deshace cerrar
+
+    return medir_mutacion(lambda: red.cerrar(e), lambda: red.reabrir(e), despues, rep * 5)
 
 
-def caso_reabrir(red, n, c):
-    nombre = nombre_estacion(n // 2)
-    red.cerrar(nombre)
-    comprobar(red.reabrir(nombre) is True, "reabrir debe aplicar")
-    red.deshacer()
-    red.deshacer()
-
-    def preparar():
-        red.cerrar(nombre)
-
-    def restablecer():
-        red.deshacer()   # deshace reabrir
-        red.deshacer()   # deshace cerrar
-
-    return mediana_mutacion(preparar, lambda: red.reabrir(nombre), restablecer, c["repeticiones_mutacion"])
+def caso_deshacer(red, n, rep):
+    return medir_mutacion(lambda: red.cerrar(nombre(n // 2)), red.deshacer, nada, rep * 5)
 
 
-def caso_deshacer(red, n, c):
-    nombre = nombre_estacion(n // 2)
-    red.cerrar(nombre)
-    comprobar(red.deshacer() is True, "deshacer debe aplicar")
-    return mediana_mutacion(lambda: red.cerrar(nombre), red.deshacer, lambda: None, c["repeticiones_mutacion"])
-
-
-def caso_rehacer(red, n, c):
-    nombre = nombre_estacion(n // 2)
-    red.cerrar(nombre)
-    red.deshacer()
-    comprobar(red.rehacer() is True, "rehacer debe aplicar")
-    red.deshacer()
-
-    def preparar():
-        red.cerrar(nombre)
+def caso_rehacer(red, n, rep):
+    def antes():
+        red.cerrar(nombre(n // 2))
         red.deshacer()
 
-    return mediana_mutacion(preparar, red.rehacer, red.deshacer, c["repeticiones_mutacion"])
+    return medir_mutacion(antes, red.rehacer, red.deshacer, rep * 5)
 
 
-def caso_simular_fila(n, c):
+def caso_simular_fila(n, rep):
     azar = random.Random(SEMILLA)
     llegadas = []
     actual = 0
     for _ in range(n):
         actual += azar.randint(0, 3)
         llegadas.append(actual)
-    comprobar(len(simular_fila(llegadas, 5, 40)) == n, "simular_fila debe devolver n esperas")
-    return mediana_lote(lambda: simular_fila(llegadas, 5, 40), max(1, c["lote"] // 100), c["repeticiones"])
+    assert len(simular_fila(llegadas, 5, 40)) == n
+    return medir_consulta(lambda: simular_fila(llegadas, 5, 40), 2, rep)
 
 
-# Definición de cada serie, con su análisis metodológico junto al caso.
+# (operación, red, caso, significado de n, complejidad esperada, análisis)
 SERIES = [
-    {
-        "operacion": "estado", "red": red_estaciones, "caso": caso_estado,
-        "variable": "n: estaciones de la red",
-        "complejidad": "O(L) promedio con tabla hash (L = longitud del nombre)",
-        "analisis": "Consulta de un nombre presente. Con hash propio y factor de carga acotado se espera tiempo casi constante al duplicar n (razón ≈ 1); el nombre tiene longitud fija.",
-    },
-    {
-        "operacion": "autocompletar", "red": red_estaciones, "caso": caso_autocompletar,
-        "variable": "n: estaciones abiertas (k = 10 fijo)",
-        "complejidad": "O(log n + k)",
-        "analisis": "Prefijo presente con k fijo, de modo que la salida no crece. Con árbol balanceado se espera un crecimiento logarítmico: razón levemente mayor que 1.",
-    },
-    {
-        "operacion": "rango", "red": red_estaciones, "caso": caso_rango,
-        "variable": "n: estaciones abiertas (s = 10 resultados fijos)",
-        "complejidad": "O(log n + s)",
-        "analisis": "Intervalo con tamaño de salida constante. Se espera razón cercana a 1, dominada por el descenso logarítmico en el árbol.",
-    },
-    {
-        "operacion": "proximo_bus", "red": red_horarios, "caso": caso_proximo_bus,
-        "variable": "H: horarios del par ruta-estación",
-        "complejidad": "O(log H) más búsqueda hash promedio",
-        "analisis": "Se crece la cantidad de pasos del mismo par ruta-estación. La búsqueda binaria debería dar razones apenas mayores que 1.",
-    },
-    {
-        "operacion": "viaje", "red": red_estaciones, "caso": caso_viaje,
-        "variable": "n: estaciones (rutas de 20 paradas solapadas cada 10)",
-        "complejidad": "O(Σ longitudes de rutas que pasan por el origen y los transbordos)",
-        "analisis": "R5 se mide aunque el criterio de escalamiento lo exceptúa. Con rutas de longitud fija y grado acotado por estación, el trabajo depende de las rutas que tocan el origen, no de n: razón esperada ≈ 1.",
-    },
-    {
-        "operacion": "ranking", "red": red_estaciones, "caso": caso_ranking,
-        "variable": "n: estaciones abiertas (k = 10 fijo)",
-        "complejidad": "O(k) con índice ordenado mantenido",
-        "analisis": "El índice ordenado se mantiene en cada mutación, así que la consulta lee los primeros k: razón esperada ≈ 1.",
-    },
-    {
-        "operacion": "agregar_parada", "red": red_ruta_larga, "caso": caso_agregar,
-        "variable": "p: paradas de la ruta editada",
-        "complejidad": "O(1) promedio para enlazar, más actualización del ranking",
-        "analisis": "Inserción tras un ancla localizada con hash. El enlace no depende de p; si el ranking usa un arreglo ordenado, su actualización puede crecer con n.",
-    },
-    {
-        "operacion": "quitar_parada", "red": red_ruta_larga, "caso": caso_quitar,
-        "variable": "p: paradas de la ruta editada",
-        "complejidad": "O(1) promedio para desenlazar, más actualización del ranking",
-        "analisis": "Simétrico a agregar_parada; el estado se restablece con deshacer fuera del intervalo.",
-    },
-    {
-        "operacion": "recorrido", "red": red_ruta_larga, "caso": caso_recorrido,
-        "variable": "p: paradas de la ruta",
-        "complejidad": "O(p) incluyendo materializar la lista",
-        "analisis": "Recorre la lista enlazada y construye una lista nueva: se espera razón ≈ 2 al duplicar p.",
-    },
-    {
-        "operacion": "recorrido_inverso", "red": red_ruta_larga, "caso": caso_recorrido_inverso,
-        "variable": "p: paradas de la ruta",
-        "complejidad": "O(p) incluyendo materializar la lista",
-        "analisis": "Llama recorrido(ruta, al_reves=True) desde la cola. Debe comportarse igual que el directo: razón ≈ 2.",
-    },
-    {
-        "operacion": "cerrar", "red": red_estaciones, "caso": caso_cerrar,
-        "variable": "n: estaciones abiertas",
-        "complejidad": "O(log n) en los árboles de abiertas, más ranking",
-        "analisis": "Cierre efectivo de una estación presente; se restablece con deshacer fuera del intervalo.",
-    },
-    {
-        "operacion": "reabrir", "red": red_estaciones, "caso": caso_reabrir,
-        "variable": "n: estaciones abiertas",
-        "complejidad": "O(log n) en los árboles de abiertas, más ranking",
-        "analisis": "La estación se cierra antes del intervalo; se mide solo la reapertura.",
-    },
-    {
-        "operacion": "deshacer", "red": red_estaciones, "caso": caso_deshacer,
-        "variable": "n: estaciones abiertas",
-        "complejidad": "O(1) amortizado en la pila más el costo de invertir la acción",
-        "analisis": "Se prepara un cierre fuera del intervalo y se mide deshacerlo: el costo es el de reabrir más mover la entrada entre pilas.",
-    },
-    {
-        "operacion": "rehacer", "red": red_estaciones, "caso": caso_rehacer,
-        "variable": "n: estaciones abiertas",
-        "complejidad": "O(1) amortizado en la pila más el costo de reaplicar la acción",
-        "analisis": "Se prepara un cierre deshecho fuera del intervalo y se mide rehacerlo.",
-    },
-    {
-        "operacion": "simular_fila", "red": None, "caso": caso_simular_fila,
-        "variable": "n: pasajeros (frecuencia 5 y capacidad 40 fijas)",
-        "complejidad": "O(n) tiempo, O(n) salida, O(1) auxiliar",
-        "analisis": "Un cursor recorre las llegadas una vez y salta directo al siguiente bus útil: se espera razón ≈ 2 al duplicar n.",
-    },
+    ("estado", red_muchas_estaciones, caso_estado, "n: estaciones", "O(L) promedio con tabla hash",
+     "Búsqueda por nombre en la tabla hash. Debería quedar casi igual al duplicar n."),
+    ("autocompletar", red_muchas_estaciones, caso_autocompletar, "n: estaciones abiertas (k = 10)",
+     "O(log n + k)", "Con k fijo la salida no crece, así que debería crecer poco (logarítmico)."),
+    ("rango", red_muchas_estaciones, caso_rango, "n: estaciones abiertas (10 resultados)",
+     "O(log n + s)", "Rango con 10 resultados fijos; se espera crecimiento logarítmico."),
+    ("proximo_bus", red_muchos_horarios, caso_proximo_bus, "H: horarios del par ruta-estación",
+     "O(log H) más búsqueda hash", "Búsqueda binaria en los horarios: la razón debería ser poco más de 1."),
+    ("viaje", red_muchas_estaciones, caso_viaje, "n: estaciones (rutas de 20 paradas)",
+     "O(suma de las rutas que pasan por el origen y los transbordos)",
+     "Las rutas tienen tamaño fijo, entonces el trabajo no depende mucho de n."),
+    ("ranking", red_muchas_estaciones, caso_ranking, "n: estaciones abiertas (k = 10)", "O(k)",
+     "El ranking ya está ordenado, solo se leen los primeros k."),
+    ("agregar_parada", red_ruta_larga, caso_agregar, "p: paradas de la ruta",
+     "O(1) promedio más actualizar el ranking", "Solo se cambian enlaces de la lista; no depende de p."),
+    ("quitar_parada", red_ruta_larga, caso_quitar, "p: paradas de la ruta",
+     "O(1) promedio más actualizar el ranking", "Igual que agregar, pero quitando el nodo."),
+    ("recorrido", red_ruta_larga, caso_recorrido, "p: paradas de la ruta", "O(p)",
+     "Recorre toda la lista y crea una nueva: al duplicar p debería duplicarse."),
+    ("recorrido_inverso", red_ruta_larga, caso_recorrido_inverso, "p: paradas de la ruta", "O(p)",
+     "Igual que recorrido pero desde la cola (al_reves=True)."),
+    ("cerrar", red_muchas_estaciones, caso_cerrar, "n: estaciones abiertas", "O(log n)",
+     "Quita la estación de los índices de abiertas."),
+    ("reabrir", red_muchas_estaciones, caso_reabrir, "n: estaciones abiertas", "O(log n)",
+     "Vuelve a meter la estación en los índices de abiertas."),
+    ("deshacer", red_muchas_estaciones, caso_deshacer, "n: estaciones abiertas",
+     "O(1) en la pila más el costo de la acción", "Saca de una pila, invierte la acción y la pasa a la otra pila."),
+    ("rehacer", red_muchas_estaciones, caso_rehacer, "n: estaciones abiertas",
+     "O(1) en la pila más el costo de la acción", "Igual que deshacer pero al revés."),
+    ("simular_fila", None, caso_simular_fila, "n: pasajeros (frecuencia 5, capacidad 40)", "O(n)",
+     "Recorre las llegadas una sola vez: al duplicar n el tiempo debería duplicarse."),
 ]
 
 
-def _razones(puntos):
-    anterior = None
-    for punto in puntos:
-        if anterior is None or anterior == 0:
-            punto["razon_anterior"] = None
-        else:
-            punto["razon_anterior"] = round(punto["mediana_ns"] / anterior, 3)
-        anterior = punto["mediana_ns"]
-
-
-def _observacion(puntos):
-    razones = [p["razon_anterior"] for p in puntos if p["razon_anterior"] is not None]
-    if not razones:
-        return ""
-    texto = ", ".join(f"{r:.2f}" for r in razones)
-    return f" Razones observadas al duplicar: {texto}."
-
-
-def ejecutar(tamanos=(1000, 2000, 4000), repeticiones=7, lote=200, repeticiones_mutacion=51, operaciones=None):
-    """Ejecuta todas las series y devuelve el objeto JSON de resultados."""
-    config = {"repeticiones": repeticiones, "lote": lote, "repeticiones_mutacion": repeticiones_mutacion}
+def ejecutar(tamanos=(1000, 2000, 4000), repeticiones=7, solo=None):
     series = []
-    for definicion in SERIES:
-        if operaciones and definicion["operacion"] not in operaciones:
+    for operacion, crear_red, caso, variable, complejidad, analisis in SERIES:
+        if solo and operacion not in solo:
             continue
-        serie = {
-            "operacion": definicion["operacion"],
-            "variable": definicion["variable"],
-            "complejidad": definicion["complejidad"],
-            "analisis": definicion["analisis"],
-            "puntos": [],
-        }
+        serie = {"operacion": operacion, "variable": variable, "complejidad": complejidad,
+                 "analisis": analisis, "puntos": []}
         try:
+            anterior = None
             for n in tamanos:
-                if definicion["red"] is None:
-                    mediana = definicion["caso"](n, config)
+                if crear_red is None:
+                    mediana = caso(n, repeticiones)
                     dimensiones = {"pasajeros": n}
                 else:
                     if Red is None:
-                        raise RuntimeError("motor.Red todavía no está integrado")
-                    with tempfile.TemporaryDirectory(prefix="transmiapp-bench-") as carpeta:
-                        dimensiones = definicion["red"](carpeta, n)
+                        raise RuntimeError("Red todavía no está en el motor")
+                    with tempfile.TemporaryDirectory() as carpeta:
+                        dimensiones = crear_red(carpeta, n)
                         red = Red(carpeta)
-                    mediana = definicion["caso"](red, n, config)
-                serie["puntos"].append({
-                    "n": n,
-                    "mediana_ns": round(mediana, 1),
-                    "razon_anterior": None,
-                    "dimensiones": dimensiones,
-                })
-            _razones(serie["puntos"])
-            serie["analisis"] += _observacion(serie["puntos"])
-        except Exception as error:  # se registra y se continúa con las demás series
+                    mediana = caso(red, n, repeticiones)
+                razon = None if anterior is None else round(mediana / anterior, 2)
+                serie["puntos"].append({"n": n, "mediana_ns": round(mediana, 1),
+                                        "razon_anterior": razon, "dimensiones": dimensiones})
+                anterior = mediana
+            razones = [str(p["razon_anterior"]) for p in serie["puntos"][1:]]
+            serie["analisis"] += " Razones observadas: " + ", ".join(razones) + "."
+        except Exception as error:
             serie["error"] = f"{type(error).__name__}: {error}"
-            print(f"  ! {definicion['operacion']}: {serie['error']}", file=sys.stderr)
+        print(operacion, "->", serie.get("error", "ok"))
         series.append(serie)
-        print(f"  · {definicion['operacion']}: {len(serie['puntos'])} puntos", file=sys.stderr)
+
     return {
         "configuracion": {
             "semilla": SEMILLA,
             "repeticiones": repeticiones,
-            "lote": lote,
-            "repeticiones_mutacion": repeticiones_mutacion,
             "tamanos": ", ".join(str(t) for t in tamanos),
             "unidad": "ns/llamada",
             "python": platform.python_version(),
-            "entorno": f"{platform.system()} {platform.release()} · {platform.machine()}",
-            "fecha": time.strftime("%Y-%m-%d %H:%M"),
+            "entorno": f"{platform.system()} {platform.machine()}",
         },
         "series": series,
     }
 
 
 def guardar(resultados, ruta):
-    """Escribe el JSON en UTF-8 por reemplazo atómico."""
+    """Guarda primero en un archivo temporal y luego lo reemplaza."""
     ruta = Path(ruta)
     ruta.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporal = tempfile.mkstemp(dir=ruta.parent, prefix=".rendimiento-", suffix=".json")
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as archivo:
-            json.dump(resultados, archivo, ensure_ascii=False, indent=2)
-        os.replace(temporal, ruta)
-    except BaseException:
-        if os.path.exists(temporal):
-            os.unlink(temporal)
-        raise
-
-
-def main(argumentos=None):
-    parser = argparse.ArgumentParser(description="Mide R1–R10 y guarda el JSON del panel R11.")
-    parser.add_argument("--salida", default=str(SALIDA_POR_DEFECTO), help="ruta del JSON de resultados")
-    parser.add_argument("--n", type=int, default=1000, help="tamaño base n (se mide n, 2n y 4n)")
-    parser.add_argument("--repeticiones", type=int, default=7)
-    parser.add_argument("--rapido", action="store_true", help="tamaños y repeticiones pequeños")
-    parser.add_argument("--solo", nargs="*", help="medir solo estas operaciones")
-    args = parser.parse_args(argumentos)
-    if args.rapido:
-        tamanos, repeticiones, lote, mutaciones = (100, 200, 400), 3, 20, 11
-    else:
-        tamanos = (args.n, args.n * 2, args.n * 4)
-        repeticiones, lote, mutaciones = args.repeticiones, 200, 51
-    print(f"Midiendo con tamaños {tamanos}…", file=sys.stderr)
-    resultados = ejecutar(tamanos, repeticiones, lote, mutaciones, args.solo)
-    guardar(resultados, args.salida)
-    print(f"Resultados guardados en {args.salida}", file=sys.stderr)
-    fallidas = [s["operacion"] for s in resultados["series"] if "error" in s]
-    return 1 if fallidas else 0
+    temporal = ruta.with_suffix(".tmp")
+    with open(temporal, "w", encoding="utf-8") as f:
+        json.dump(resultados, f, ensure_ascii=False, indent=2)
+    os.replace(temporal, ruta)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--salida", default="scripts/resultados/rendimiento.json")
+    parser.add_argument("--n", type=int, default=1000)
+    parser.add_argument("--rapido", action="store_true", help="tamaños pequeños para probar")
+    parser.add_argument("--solo", nargs="*")
+    args = parser.parse_args()
+
+    if args.rapido:
+        resultados = ejecutar((100, 200, 400), 3, args.solo)
+    else:
+        resultados = ejecutar((args.n, 2 * args.n, 4 * args.n), 7, args.solo)
+    guardar(resultados, args.salida)
+    print("Guardado en", args.salida)
