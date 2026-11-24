@@ -1,0 +1,156 @@
+
+  "configuracion": {
+    "semilla": 42,
+    "repeticiones": 7,
+    "tamanos": "1000, 2000, 4000",
+    "unidad": "ns/llamada",
+    "python": "3.9.6",
+    "entorno": "Darwin arm64"
+  },
+  "series": [
+    {
+      "operacion": "estado",
+      "variable": "n: estaciones",
+      "complejidad": "O(L) promedio con tabla hash",
+      "analisis": "Búsqueda por nombre en la tabla hash. Debería quedar casi igual al duplicar n.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "autocompletar",
+      "variable": "n: estaciones abiertas (k = 10)",
+      "complejidad": "O(log n + k)",
+      "analisis": "Con k fijo la salida no crece, así que debería crecer poco (logarítmico).",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "rango",
+      "variable": "n: estaciones abiertas (10 resultados)",
+      "complejidad": "O(log n + s)",
+      "analisis": "Rango con 10 resultados fijos; se espera crecimiento logarítmico.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "proximo_bus",
+      "variable": "H: horarios del par ruta-estación",
+      "complejidad": "O(log H) más búsqueda hash",
+      "analisis": "Búsqueda binaria en los horarios: la razón debería ser poco más de 1.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "viaje",
+      "variable": "n: estaciones (rutas de 20 paradas)",
+      "complejidad": "O(suma de las rutas que pasan por el origen y los transbordos)",
+      "analisis": "Las rutas tienen tamaño fijo, entonces el trabajo no depende mucho de n.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "ranking",
+      "variable": "n: estaciones abiertas (k = 10)",
+      "complejidad": "O(k)",
+      "analisis": "El ranking ya está ordenado, solo se leen los primeros k.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "agregar_parada",
+      "variable": "p: paradas de la ruta",
+      "complejidad": "O(1) promedio más actualizar el ranking",
+      "analisis": "Solo se cambian enlaces de la lista; no depende de p.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "quitar_parada",
+      "variable": "p: paradas de la ruta",
+      "complejidad": "O(1) promedio más actualizar el ranking",
+      "analisis": "Igual que agregar, pero quitando el nodo.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "recorrido",
+      "variable": "p: paradas de la ruta",
+      "complejidad": "O(p)",
+      "analisis": "Recorre toda la lista y crea una nueva: al duplicar p debería duplicarse.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "recorrido_inverso",
+      "variable": "p: paradas de la ruta",
+      "complejidad": "O(p)",
+      "analisis": "Igual que recorrido pero desde la cola (al_reves=True).",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "cerrar",
+      "variable": "n: estaciones abiertas",
+      "complejidad": "O(log n)",
+      "analisis": "Quita la estación de los índices de abiertas.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "reabrir",
+      "variable": "n: estaciones abiertas",
+      "complejidad": "O(log n)",
+      "analisis": "Vuelve a meter la estación en los índices de abiertas.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "deshacer",
+      "variable": "n: estaciones abiertas",
+      "complejidad": "O(1) en la pila más el costo de la acción",
+      "analisis": "Saca de una pila, invierte la acción y la pasa a la otra pila.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "rehacer",
+      "variable": "n: estaciones abiertas",
+      "complejidad": "O(1) en la pila más el costo de la acción",
+      "analisis": "Igual que deshacer pero al revés.",
+      "puntos": [],
+      "error": "RuntimeError: Red todavía no está en el motor"
+    },
+    {
+      "operacion": "simular_fila",
+      "variable": "n: pasajeros (frecuencia 5, capacidad 40)",
+      "complejidad": "O(n)",
+      "analisis": "Recorre las llegadas una sola vez: al duplicar n el tiempo debería duplicarse. Razones observadas: 1.73, 1.86.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 466958.5,
+          "razon_anterior": null,
+          "dimensiones": {
+            "pasajeros": 1000
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 807187.5,
+          "razon_anterior": 1.73,
+          "dimensiones": {
+            "pasajeros": 2000
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 1503042.0,
+          "razon_anterior": 1.86,
+          "dimensiones": {
+            "pasajeros": 4000
+          }
+        }
+      ]
+    }
+  ]
+}
