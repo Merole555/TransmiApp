@@ -94,9 +94,90 @@ con la complejidad esperada y el análisis de la operación.
 - **Relación con R11.** La serie `simular_fila` usa frecuencia 5 y capacidad
   40 fijas y n creciente; se espera razón ≈ 2 al duplicar n.
 
-### R1–R9
+### R1–R3 — miembro 1
 
-Pendientes: las escribe el autor de cada requisito.
+Pendientes: las documentará el responsable cuando integre la red compartida.
+
+### R4 · `proximo_bus(estacion, ruta, hora)` — miembro 2
+
+- **Contrato.** Devuelve la primera hora programada mayor o igual a la consultada,
+  o `None` si no existe servicio disponible. Comprueba que la estación esté
+  `ABIERTA` y pertenezca a la ruta vigente. Acepta `HH:MM` con horas
+  extendidas de 00 a 99 y minutos de 00 a 59; un formato inválido produce
+  `ValueError`. Las horas repetidas se conservan.
+- **Estructura.** Tabla hash propia indexada por `(ruta, estación)`, cuyo
+  valor es una lista de minutos enteros ordenados de menor a mayor.
+- **Algoritmo.** `indexar_horarios` convierte las horas a minutos y aplica
+  mergesort propio a cada lista. `proximo_bus` realiza una búsqueda binaria
+  manual del primer minuto que cumple `minuto >= consulta` y reconstruye
+  `HH:MM`.
+- **Alternativa descartada.** Recorrer linealmente todos los horarios en cada
+  consulta obligaría a examinar hasta H entradas.
+- **Complejidad.** Para H horarios de una pareja: construcción
+  O(H log H) y espacio O(H) para ordenar esa lista; consulta O(log H)
+  más búsquedas hash de costo promedio. El almacenamiento total depende
+  de todos los registros cargados.
+- **Relación con R11.** La serie `proximo_bus` varía la cantidad de horarios
+  por pareja y contrasta las consultas con el crecimiento logarítmico esperado.
+
+### R5 · `viaje(origen, destino)` — miembro 2
+
+- **Contrato.** Devuelve `None` si no hay viaje, o
+  `("DIRECTO" | "TRANSBORDO", saltos, tramos)`; cada tramo es
+  `(ruta, estación_de_subida, estación_de_bajada)`. Solo se avanza en el
+  sentido de las rutas y se permite **como máximo un transbordo**.
+  Las estaciones cerradas pueden atravesarse y cuentan como saltos,
+  pero no sirven para subir, bajar ni cambiar de ruta.
+- **Estructura.** Consulta el índice de ocurrencias
+  estación → `(ruta, nodo)` aportado por `red.salidas`. Cada nodo de
+  recorrido enlazado expone `estacion` y `siguiente`; las ocurrencias
+  repetidas no se colapsan.
+- **Algoritmo.** Recorre hacia adelante cada salida del origen; examina
+  destinos directos y, en estaciones intermedias abiertas, recorre
+  salidas de otra ruta para buscar un destino con un único cambio.
+  Conserva el mejor candidato por menor número de saltos; ante empate,
+  prefiere un tramo directo y después el orden lexicográfico de tramos.
+- **Alternativa descartada.** Construir un grafo completo por cada consulta
+  duplicaría trabajo ya disponible en los índices de recorridos.
+- **Complejidad.** Si I es el número de ocurrencias de salida del origen,
+  P la longitud máxima de un recorrido y C las salidas candidatas por
+  estación de transbordo, la cota conservadora del recorrido es
+  O(I · P · (1 + C · P)), sin contar el trabajo de construir el índice
+  compartido. Guarda únicamente el candidato mejor y sus tramos.
+- **Relación con R11.** La serie `viaje` mide el tiempo de planificación
+  aunque no esté sujeta al mismo umbral de escalamiento.
+
+### R6 · `ranking(k)` — miembro 2
+
+- **Contrato.** Devuelve hasta k tuplas nuevas `(estación, buses_diarios)`
+  para estaciones abiertas, ordenadas por conteo descendente y nombre
+  ascendente en caso de empate. Con k no positivo devuelve una lista vacía.
+  La cuenta incluye registros de paso repetidos y puede ser cero.
+- **Estructura.** Una tabla propia guarda `(conteo, abierta)` por estación
+  y una **lista preordenada** contiene claves `(-conteo, nombre)` de las
+  estaciones abiertas. Esta es la estructura implementada; no depende
+  de un árbol AVL externo.
+- **Algoritmo.** `registrar` incorpora cada estación. Al activar o
+  desactivar una pareja `(ruta, estación)` se suma o resta la cantidad
+  de horarios correspondiente. Al cerrar una estación se elimina su
+  clave del orden, pero se conserva el conteo para reabrirla. Las
+  actualizaciones buscan la posición por búsqueda binaria manual e
+  insertan o quitan la clave; `consultar` devuelve los primeros k.
+- **Alternativa descartada.** Reordenar todas las estaciones en cada
+  consulta repetiría trabajo innecesario. Un árbol balanceado facilitaría
+  las actualizaciones O(log n), pero exige otra implementación compartida.
+- **Complejidad.** La consulta cuesta O(min(k, n)) sobre n estaciones
+  abiertas; cada actualización del orden cuesta O(n) por los desplazamientos
+  de la lista, aunque la posición se encuentre en O(log n). El índice
+  ocupa O(n) espacio, además de la tabla de conteos.
+- **Relación con R11.** La serie `ranking` mide consultas de los primeros
+  k resultados con k fijo. Deben medirse también cierres y reaperturas
+  después de integrar las operaciones reales.
+
+### R7–R9 — miembro 3
+
+Pendientes: las documentará el responsable cuando integre las operaciones
+y la historia de cambios de la red.
 
 ## Datos
 
