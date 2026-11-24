@@ -68,6 +68,46 @@ con la complejidad esperada y el análisis de la operación.
 
 ## Fichas R12
 
+### R1 · `estado(nombre)` — miembro 1
+
+- **Contrato.** Devuelve `"ABIERTA"`, `"CERRADA"` o `"NO_EXISTE"`. Una
+  estación cerrada sigue registrada para poder responder y reabrirla.
+- **Estructura.** `TablaHash` propia (`motor/estructuras.py`) con
+  encadenamiento: cada cubo es una lista de pares `[clave, valor]`. El hash
+  recorre los caracteres (`valor * 31 + ord(c)`) y la tabla duplica sus cubos
+  cuando pasa de 0,75 elementos por cubo.
+- **Alternativa descartada.** Buscar el nombre en una lista: O(n) por consulta.
+- **Complejidad.** O(L) promedio, con L = largo del nombre (calcular el hash y
+  comparar la clave). Peor caso O(n·L) si las n estaciones chocan en un cubo.
+  Espacio O(n).
+- **Relación con R11.** La serie `estado` duplica las estaciones con nombres de
+  largo fijo; se espera razón ≈ 1.
+
+### R2 · `autocompletar(prefijo, k)` y R3 · `rango(desde, hasta)` — miembro 1
+
+- **Contrato.** R2 devuelve hasta k estaciones abiertas que empiezan por el
+  prefijo, en orden; prefijo vacío devuelve las primeras k y `k <= 0` devuelve
+  `[]`. R3 devuelve las abiertas entre `desde` y `hasta`, ambos incluidos; si
+  `desde > hasta`, `[]`. Cada llamada devuelve una lista nueva.
+- **Estructura.** `ArbolAVL` propio que solo guarda las estaciones abiertas.
+  Se rebalancea con rotaciones simples y dobles, así su altura es O(log n).
+- **Algoritmo.** `desde(clave)` baja hasta el primer nombre mayor o igual a la
+  clave guardando en una pila los ancestros pendientes, y sigue el recorrido en
+  orden con esa pila. R2 se detiene al juntar k nombres o cuando un nombre ya no
+  empieza por el prefijo; R3, cuando el nombre pasa de `hasta`.
+- **Cierres (R8).** `estaciones.retirar_abierta` y `reinsertar_abierta`
+  cambian la tabla, sacan o meten el nombre del AVL y avisan al ranking, en
+  O(log n). Así R2 y R3 nunca recorren estaciones cerradas.
+- **Alternativas descartadas.** Una lista ordenada busca en O(log n), pero
+  cerrar o reabrir desplaza elementos: O(n). Un árbol con todas las estaciones
+  que filtra cerradas al consultar se degrada cuando hay muchos cierres.
+- **Complejidad.** O(log n + s) visitas, con n estaciones abiertas y s
+  resultados (s ≤ k en R2); materializar la salida cuesta O(s). Cada
+  comparación de cadenas cuesta hasta O(L). Espacio O(n) para el árbol y O(s)
+  para la salida (más la pila, O(log n)).
+- **Relación con R11.** Las series `autocompletar` y `rango` duplican las
+  estaciones con k = 10 y s = 10 fijos; se espera razón poco mayor que 1.
+
 ### R10 · `simular_fila(llegadas, frecuencia, capacidad)` — miembro 4
 
 - **Contrato.** Devuelve una lista nueva con la espera de cada persona, en
@@ -101,5 +141,49 @@ Pendientes: las escribe el autor de cada requisito.
 ## Datos
 
 `datos/` contiene `estaciones.csv`, `rutas.csv` y `horarios.csv`, generados
-desde el GTFS con `scripts/convertir_gtfs.py` (procedencia, fecha de servicio
-y SHA-256 del ZIP: pendiente, miembro 1).
+desde el GTFS con `scripts/convertir_gtfs.py`.
+
+- **Procedencia:** GTFS de julio de 2021 indicado por el profesor
+  ([catálogo de Datos Abiertos Bogotá](https://datosabiertos.bogota.gov.co/dataset/especificacion-gtfs-general-transit-feed-specification-sitp)).
+  URL exacta del ZIP y SHA-256: pendiente. El ZIP no se sube al repositorio.
+- **Fecha de servicio:** 2021-07-21 (día hábil), pendiente de confirmar con el ZIP.
+
+### Conversión (miembro 1)
+
+```bash
+.venv/bin/python scripts/convertir_gtfs.py --gtfs "<RUTA_AL_ZIP>" --salida datos --fecha-servicio 2021-07-21
+shasum -a 256 "<RUTA_AL_ZIP>"                      # macOS / Linux
+Get-FileHash "<RUTA_AL_ZIP>" -Algorithm SHA256      # Windows PowerShell
+```
+
+Política provisional del conversor:
+
+1. **Servicios del día.** Los de `calendar.txt` que corren ese día de la semana
+   dentro de su rango de fechas, más las excepciones de `calendar_dates.txt`
+   (tipo 1 agrega, tipo 2 quita). Sin calendario, la conversión se detiene.
+2. **Estaciones.** Cada andén se resuelve a su estación con `parent_station`.
+   Nombres en mayúsculas, sin tildes y con un solo espacio; si dos estaciones
+   distintas quedan con el mismo nombre, se reporta la colisión.
+3. **Rutas troncales.** Se dejan las rutas cuyos viajes paran solo en andenes
+   que pertenecen a una estación. `--todas-las-rutas` incluye las zonales.
+4. **Patrones.** Cada ruta, sentido y secuencia de estaciones distinta recibe
+   un id determinista (`B74_0_01`). Las paradas se ordenan por `stop_sequence`
+   numérico y varios andenes seguidos de la misma estación cuentan como uno.
+5. **Horas.** Se usa la salida (o la llegada si falta), truncada al minuto. Se
+   toman las horas 00–23 de los viajes activos ese día y las horas 24–47 de los
+   del día anterior pasadas al día civil (25:10 → 01:10). Se conservan pasos
+   simultáneos de buses distintos.
+
+### Carga en el motor
+
+`Red(carpeta)` lee los CSV con `csv.reader` en orden estaciones → rutas →
+horarios y valida cabeceras exactas, estaciones únicas, `orden` entero y único
+por ruta, referencias existentes y horas `HH:MM`. Cada error indica archivo y
+fila (por ejemplo `rutas.csv, fila 3: orden 1 repetido en T1`). Acepta filas
+desordenadas: cada ruta se ordena con mergesort propio y se arma como lista
+doblemente enlazada.
+
+```bash
+.venv/bin/python -m unittest discover -s scripts/pruebas -p "test_estaciones.py" -v
+.venv/bin/python -m unittest discover -s scripts/pruebas -p "test_conversion.py" -v
+```
