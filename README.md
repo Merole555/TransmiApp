@@ -222,13 +222,23 @@ con la complejidad esperada y el análisis de la operación.
 
 ## Datos
 
-`datos/` contiene `estaciones.csv`, `rutas.csv` y `horarios.csv`, generados
-desde el GTFS con `scripts/convertir_gtfs.py`.
+`datos/` contiene los tres CSV de la red real de TransMilenio **que entregó el
+profesor** (Juan Carlos Rubio Coello) el 3 de noviembre de 2026 en el canal
+General del equipo de Teams *9324 PERIODO 2026-2 ESTRUC DATOS Y ALGORITMOS*
+(«Archivos para el proyecto final»). El profesor no compartió el ZIP GTFS y
+dio los datos ya convertidos, así que se usan tal cual, sin modificarlos.
 
-- **Procedencia:** GTFS de julio de 2021 indicado por el profesor
-  ([catálogo de Datos Abiertos Bogotá](https://datosabiertos.bogota.gov.co/dataset/especificacion-gtfs-general-transit-feed-specification-sitp)).
-  URL exacta del ZIP y SHA-256: pendiente. El ZIP no se sube al repositorio.
-- **Fecha de servicio:** 2021-07-21 (día hábil), pendiente de confirmar con el ZIP.
+| Archivo | Filas (sin cabecera) | SHA-256 |
+| --- | --- | --- |
+| `estaciones.csv` | 147 estaciones | `d2d1a61e715469dbb4f272f3aff4954b360ca09a8df15dd84cbd6af8e6764376` |
+| `rutas.csv` | 1.927 paradas en 181 rutas | `7fe7ef528ed1b55a218ee4e30125dd7c4f66142373616522668e6a6ae4dcec4c` |
+| `horarios.csv` | 140.492 pasos | `6b50b2a150083a58766f11ae061879fe97b52ae03f3ea39a410331667320317c` |
+
+`Red("datos")` los carga y valida en cerca de 1 s. `estaciones.csv` viene con
+fin de línea CRLF (Windows); `csv.reader` lo lee igual.
+
+`scripts/convertir_gtfs.py` queda como herramienta para regenerar CSV desde
+cualquier GTFS (por ejemplo, para probar con otra red más grande).
 
 ### Conversión (miembro 1)
 
