@@ -83,7 +83,7 @@ class ApiTests(unittest.TestCase):
             "tipo": "DIRECTO", "saltos": 2, "tramos": [{"ruta": "T1", "sube": "A", "baja": "C"}],
         })
         esperado = {"tipo": "TRANSBORDO", "saltos": 2, "tramos": [
-            {"ruta": "t1", "sube": "A", "baja": "B"},
+            {"ruta": "T1", "sube": "A", "baja": "B"},
             {"ruta": "T2", "sube": "B", "baja": "D"},
         ]}
         self.assertEqual(plan("a", "d"), esperado)
