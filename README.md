@@ -136,7 +136,85 @@ con la complejidad esperada y el análisis de la operación.
 
 ### R1–R9
 
-Pendientes: las escribe el autor de cada requisito.
+(falta completar algunos R)
+
+### R7 · `agregar_parada`, `quitar_parada`, `recorrido` — miembro 3
+
+- **Contrato.** `agregar_parada(ruta, nueva, despues_de)` inserta `nueva`
+  entre `despues_de` y su sucesora. Devuelve `False`, sin tocar nada, si la
+  ruta no existe, `nueva` no es una estación, `nueva` ya figura en la ruta,
+  el ancla no existe o aparece más de una vez, o el ancla es la última
+  parada. `quitar_parada(ruta, estacion)` exige una ocurrencia única y deja
+  al menos una parada. `recorrido(ruta, al_reves=False)` devuelve una lista
+  nueva con el trazado físico (incluye cerradas) y `[]` si la ruta no existe.
+- **Estructura.** Lista doblemente enlazada por ruta (`Nodo`, con cabeza y
+  cola en `red.rutas`) y un índice `TablaHash` propio
+  `(ruta, estación) -> [cantidad, nodo]` que se crea la primera vez que se
+  muta. La cantidad detecta anclas ambiguas cuando el CSV repite una
+  estación en una ruta. `red.paradas` (estación -> rutas) se actualiza con
+  cada cambio.
+- **Algoritmo.** Se valida todo antes de tocar estructuras. Insertar y
+  quitar solo reparan los enlaces del nodo y de sus dos vecinos y, si el nodo
+  es un extremo, la cabeza o la cola. Además se actualizan el índice, `red.paradas` y la
+  membresía del ranking (`cambiar_membresia`): quitar resta los horarios de
+  la pareja ruta-estación y agregar los reactiva si existen. Una parada sin
+  horarios aporta cero.
+- **Alternativa descartada.** Buscar el ancla recorriendo la ruta: O(p) por
+  edición y no detecta ambigüedad. Una lista de Python con `insert` y `pop`
+  desplazaría O(p) elementos y obligaría a recalcular posiciones.
+- **Complejidad.** Con p paradas de la ruta, r rutas que pasan por la
+  estación y n estaciones. Agregar: O(L) promedio para los hashes (L = largo
+  del nombre) y O(1) para los enlaces, más la actualización del ranking.
+  Quitar: lo mismo más O(r) para ubicar y sacar la entrada en `red.paradas`.
+  `recorrido`: O(p) tiempo y espacio por la lista nueva. La primera mutación
+  construye el índice en O(total de paradas). Espacio extra O(paradas).
+  Ranking: el índice del miembro 2 busca en O(log n) pero inserta y elimina
+  en un arreglo, así que el desplazamiento cuesta O(n).
+- **Relación con R11.** `agregar_parada` y `quitar_parada` varían p
+  (paradas de la ruta): no deberían depender de p, razón ≈ 1.
+  `recorrido` y `recorrido_inverso` son O(p): razón ≈ 2.
+
+### R8 · `cerrar(nombre)` y `reabrir(nombre)` — miembro 3
+
+- **Contrato.** Devuelven `True` solo si cambia el estado. Cerrar una
+  estación inexistente o ya cerrada devuelve `False`; igual con reabrir. Una
+  cerrada sigue registrada y en el trazado, pero no se ofrece en R2, R3, R4,
+  R6, ni se usa para subir, bajar o transbordar en R5.
+- **Estructura.** No hay estructura nueva: delega en
+  `estaciones.retirar_abierta` y `reinsertar_abierta`, que actualizan la
+  `TablaHash` de R1, el `ArbolAVL` de abiertas y el índice del ranking. Los
+  enlaces, horarios y conteos se conservan para poder reabrir.
+- **Alternativa descartada.** Borrar la estación de la red: se perdería su
+  registro, su lugar en las rutas y sus horarios, y reabrir sería
+  reconstruirlos.
+- **Complejidad.** O(L) para el hash + O(log n) para el AVL con n estaciones
+  abiertas, más la actualización del ranking (búsqueda O(log n) y
+  desplazamiento O(n) en el arreglo ordenado del miembro 2).
+- **Relación con R11.** Series `cerrar` y `reabrir` con n estaciones. Se
+  espera crecimiento suave; si la medición muestra más, es el
+  desplazamiento del arreglo del ranking.
+
+### R9 · `deshacer()` y `rehacer()` — miembro 3
+
+- **Contrato.** Devuelven `True` solo si revierten o reaplican un cambio.
+  Con la pila vacía devuelven `False`. Una mutación nueva y exitosa vacía
+  rehacer; una inválida conserva ambas pilas.
+- **Estructura.** Dos `Pila` propias (arreglos con `append` y `pop` al
+  final) de `Registro`: acción, estación, ruta, nodo y vecinos exactos
+  (más la posición en `red.paradas`). No se copia la red.
+- **Algoritmo.** Una sola rutina interna aplica e invierte cada acción:
+  agregar e invertir quitar son las mismas dos operaciones (`_enlazar` y
+  `_desenlazar`) y cerrar/reabrir son inversas entre sí. `deshacer` saca de
+  la pila de deshacer, invierte y apila en rehacer; `rehacer` hace lo
+  contrario. Como se reutiliza el mismo nodo con sus vecinos guardados, el
+  orden queda idéntico al original.
+- **Alternativa descartada.** Guardar una copia de la red por cambio: O(red)
+  por mutación en tiempo y espacio.
+- **Complejidad.** Mover el registro entre pilas es O(1); el costo total es
+  el de la acción revertida (R7 o R8). Vaciar rehacer es O(1) amortizado
+  (cada entrada se apila una vez y se descarta una vez). Espacio O(cambios).
+- **Relación con R11.** Series `deshacer` y `rehacer` con el estado previo
+  restablecido fuera del intervalo medido.
 
 ## Datos
 

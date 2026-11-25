@@ -228,3 +228,25 @@ class Nodo:
         self.estacion = estacion
         self.anterior = None
         self.siguiente = None
+
+class Pila:
+    """Pila sobre un arreglo: apilar y desapilar al final, O(1) amortizado."""
+
+    def __init__(self):
+        self.datos = []
+
+    def __len__(self):
+        return len(self.datos)
+
+    def apilar(self, valor):
+        self.datos.append(valor)
+
+    def desapilar(self):
+        return self.datos.pop()
+
+    def vaciar(self):
+        # Se desapila una a una: cada entrada se apiló una vez y se descarta
+        # una vez, así que el costo es O(1) amortizado por mutación.
+        while len(self.datos) > 0:
+            self.datos.pop()
+
