@@ -24,7 +24,7 @@ class ApiTests(unittest.TestCase):
         self.motor = Mock()
         self.motor.estado = red.estado
         self.motor.viaje = lambda *args: viajes.viaje(red, *args)
-        self.motor.proximo_bus = lambda *args: viajes.proximo_bus(red, *args)
+        self.motor.proximo_bus = Mock(side_effect=lambda *args: viajes.proximo_bus(red, *args))
         self.motor.ranking.return_value = [("B", 3)]
         self.motor.autocompletar.return_value = ["B"]
         self.motor.rango.return_value = ["A", "B"]
