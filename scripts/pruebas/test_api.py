@@ -16,15 +16,15 @@ class ApiTests(unittest.TestCase):
     def setUp(self):
         carpeta = self.enterContext(TemporaryDirectory())
         self.archivo = Path(carpeta) / "rendimiento.json"
-        red = RedPrueba([("t1", ["A", "B", "C"]), ("T2", ["B", "D"])])
-        red.horarios = viajes.indexar_horarios(TablaPrueba(), [("t1", "B", "08:05")])
+        red = RedPrueba([("T1", ["A", "B", "C"]), ("T2", ["B", "D"])])
+        red.horarios = viajes.indexar_horarios(TablaPrueba(), [("T1", "B", "08:05")])
         red.tiene_parada = lambda ruta, nombre: any(
             actual == ruta for actual, _ in red.salidas(nombre)
         )
         self.motor = Mock()
         self.motor.estado = red.estado
         self.motor.viaje = lambda *args: viajes.viaje(red, *args)
-        self.motor.proximo_bus = lambda *args: viajes.proximo_bus(red, *args)
+        self.motor.proximo_bus = Mock(side_effect=lambda *args: viajes.proximo_bus(red, *args))
         self.motor.ranking.return_value = [("B", 3)]
         self.motor.autocompletar.return_value = ["B"]
         self.motor.rango.return_value = ["A", "B"]
@@ -65,10 +65,11 @@ class ApiTests(unittest.TestCase):
         ruta = "/api/proximo-bus"
         parametros = {"estacion": " b ", "ruta": "t1", "hora": "08:05"}
         self.assertEqual(self.client.get(ruta, params=parametros).json(), {"hora": "08:05"})
-        parametros["ruta"] = "T1"
+        parametros["ruta"] = " T1 "
         respuesta = self.client.get(ruta, params=parametros)
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.json(), {"hora": None})
+        self.assertEqual(respuesta.json(), {"hora": "08:05"})
+        self.motor.proximo_bus.assert_called_with("B", "T1", "08:05")
         parametros["hora"] = "24:60"
         self.assertEqual(self.client.get(ruta, params=parametros).status_code, 422)
 
@@ -79,10 +80,10 @@ class ApiTests(unittest.TestCase):
             return respuesta.json()["viaje"]
 
         self.assertEqual(plan("á", "c"), {
-            "tipo": "DIRECTO", "saltos": 2, "tramos": [{"ruta": "t1", "sube": "A", "baja": "C"}],
+            "tipo": "DIRECTO", "saltos": 2, "tramos": [{"ruta": "T1", "sube": "A", "baja": "C"}],
         })
         esperado = {"tipo": "TRANSBORDO", "saltos": 2, "tramos": [
-            {"ruta": "t1", "sube": "A", "baja": "B"},
+            {"ruta": "T1", "sube": "A", "baja": "B"},
             {"ruta": "T2", "sube": "B", "baja": "D"},
         ]}
         self.assertEqual(plan("a", "d"), esperado)
@@ -104,15 +105,30 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/recorrido?ruta=t1&al_reves=true").json(), {
             "estaciones": ["C", "B", "A"],
         })
-        self.motor.recorrido.assert_called_once_with("t1", True)
+        self.motor.recorrido.assert_called_once_with("T1", True)
         self.assertEqual(self.client.post("/api/paradas/agregar", json={
             "ruta": "t1", "nueva": "é", "despues_de": " b ",
         }).json(), {"cambio": True})
-        self.motor.agregar_parada.assert_called_once_with("t1", "E", "B")
+        self.motor.agregar_parada.assert_called_once_with("T1", "E", "B")
         respuesta = self.client.post("/api/paradas/quitar", json={"ruta": "t1", "estacion": "e"})
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.json(), {"cambio": False})
-        self.motor.quitar_parada.assert_called_once_with("t1", "E")
+        self.motor.quitar_parada.assert_called_once_with("T1", "E")
+
+    def test_identificadores_de_ruta_con_espacios_y_minusculas(self):
+        self.assertEqual(self.client.get("/api/recorrido", params={
+            "ruta": "  t1  ", "al_reves": False,
+        }).status_code, 200)
+        self.motor.recorrido.assert_called_with("T1", False)
+        self.assertEqual(self.client.post("/api/paradas/agregar", json={
+            "ruta": " t1 ", "nueva": "e", "despues_de": "b",
+        }).json(), {"cambio": True})
+        self.motor.agregar_parada.assert_called_with("T1", "E", "B")
+        self.assertEqual(self.client.post("/api/paradas/quitar", json={
+            "ruta": "t1", "estacion": "e",
+        }).json(), {"cambio": False})
+        self.motor.quitar_parada.assert_called_with("T1", "E")
+
 
     def test_fila_valida_y_tipo_invalido(self):
         url = "/api/simular-fila"

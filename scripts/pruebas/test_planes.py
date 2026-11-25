@@ -69,6 +69,59 @@ class ViajeTests(unittest.TestCase):
         self.assertIsNone(viaje(red, "A", "D"))
 
 
+    def test_empate_lexicografico_independiente_de_orden_de_carga(self):
+        for recorridos in (
+            [("Z99", ["A", "B", "D"]), ("B74", ["A", "C", "D"])],
+            [("B74", ["A", "C", "D"]), ("Z99", ["A", "B", "D"])],
+        ):
+            with self.subTest(recorridos=recorridos):
+                red = RedPrueba(recorridos)
+                self.assertEqual(viaje(red, "A", "D"), (
+                    "DIRECTO", 2, [("B74", "A", "D")],
+                ))
+
+    def test_empate_directo_prefiere_sin_transbordo(self):
+        red = RedPrueba([
+            ("Z99", ["A", "B", "D"]),
+            ("A01", ["A", "B"]),
+            ("A02", ["B", "D"]),
+        ])
+        self.assertEqual(viaje(red, "A", "D"), (
+            "DIRECTO", 2, [("Z99", "A", "D")],
+        ))
+
+    def test_empate_entre_puntos_de_transbordo(self):
+        red = RedPrueba([
+            ("T1", ["A", "B", "C"]),
+            ("T2", ["B", "E", "D"]),
+            ("T3", ["C", "D"]),
+        ])
+        self.assertEqual(viaje(red, "A", "D"), (
+            "TRANSBORDO", 3, [("T1", "A", "B"), ("T2", "B", "D")],
+        ))
+        red.abiertas.remove("B")
+        self.assertEqual(viaje(red, "A", "D"), (
+            "TRANSBORDO", 3, [("T1", "A", "C"), ("T3", "C", "D")],
+        ))
+
+    def test_transbordo_mas_corto_gana_a_directo_y_sentido_unico(self):
+        red = RedPrueba([
+            ("DIREC", ["A", "X", "Y", "D"]),
+            ("T1", ["A", "B"]),
+            ("T2", ["B", "D"]),
+        ])
+        self.assertEqual(viaje(red, "A", "D"), (
+            "TRANSBORDO", 2, [("T1", "A", "B"), ("T2", "B", "D")],
+        ))
+        self.assertIsNone(viaje(red, "D", "A"))
+
+    def test_ocurrencias_repetidas_busca_salida_posterior_mas_corta(self):
+        red = RedPrueba([("T1", ["A", "X", "A", "D"])])
+        self.assertEqual(viaje(red, "A", "D"), (
+            "DIRECTO", 1, [("T1", "A", "D")],
+        ))
+
+
 class RankingTests(unittest.TestCase):
     def test_conteos_empates_y_mutaciones(self):
         horarios = indexar_horarios(TablaPrueba(), [
@@ -89,6 +142,16 @@ class RankingTests(unittest.TestCase):
         indice.cambiar_apertura("B", True)
         self.assertEqual(indice.consultar(2), [("A", 1), ("B", 1)])
         indice.cambiar_membresia("T2", "B", True)
+        # Repetir eventos o registros no puede duplicar claves ni contabilizar
+        # buses dos veces: los avisos son transiciones de estado.
+        indice.registrar("B")
+        indice.cambiar_membresia("T2", "B", True)
+        self.assertEqual(indice.consultar(5), [("B", 3), ("A", 1), ("C", 0)])
+        indice.cambiar_membresia("T2", "B", False)
+        indice.cambiar_membresia("T2", "B", False)
+        self.assertEqual(indice.consultar(5), [("A", 1), ("B", 1), ("C", 0)])
+        indice.cambiar_membresia("T2", "B", True)
+        self.assertEqual(indice.consultar(5), [("B", 3), ("A", 1), ("C", 0)])
         salida = indice.consultar(1)
         self.assertEqual(salida, [("B", 3)])
         salida.clear()

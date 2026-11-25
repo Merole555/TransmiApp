@@ -45,6 +45,42 @@ npm --prefix frontend run build
 npm --prefix frontend run lint
 ```
 
+## Pruebas de estrés e integración (R1–R11)
+
+Las pruebas reproducibles están en `scripts/pruebas/test_estres.py`.
+Usan CSV sintéticos temporales (400 estaciones y dos rutas conectadas),
+consultas repetidas, ediciones y reversión, una fila de 20.000 pasajeros,
+la API real y las 15 series de R11 con tamaños reducidos. No dependen
+de los CSV del profesor ni imponen umbrales de tiempo sensibles a la CPU.
+
+```bash
+# Desde la raíz del repositorio y con las dependencias de backend instaladas
+python -m unittest discover -s scripts/pruebas -p "test_estres.py" -v
+# Suite completa (incluye estas pruebas)
+python -m unittest discover -s scripts/pruebas -p "test_*.py" -v
+```
+
+Para datos reales, conservar también la validación manual de arranque,
+consultas y operaciones desde la web. Los identificadores de ruta que
+llegan por HTTP se convierten a mayúsculas y se recortan los espacios
+externos antes de consultar o modificar la red (`t1` y `T1` equivalen);
+el motor y los CSV mantienen sus IDs originales.
+
+## Desempate de itinerarios (R5)
+
+R5 minimiza los **saltos entre estaciones**. Si hay empate, prefiere
+el recorrido directo (sin transbordo); si el número de transbordos también
+es igual, elige la secuencia de tramos menor en orden lexicográfico
+(`ruta`, `sube`, `baja`). Por ejemplo, con la misma cantidad de saltos,
+`B74` tiene prioridad sobre `Z99` entre rutas directas, sin depender
+del orden de carga de los CSV. La API devuelve **un solo itinerario**.
+
+R5 no pondera hora de salida, duración real, tráfico, frecuencia ni cantidad
+de buses de R6: una ruta elegida por desempate no necesariamente será la
+más rápida. Hay pruebas específicas para empates directo/transbordo, dos
+puntos de transbordo, estaciones cerradas, ocurrencias repetidas y
+membresías notificadas más de una vez.
+
 ## Medición de rendimiento (R11)
 
 ```bash
