@@ -61,7 +61,11 @@ operación (estaciones, horarios por par o paradas de la ruta). Se usa
 `time.perf_counter_ns`, calentamiento, 7 muestras y mediana. Las consultas se
 cronometran en lotes y se divide por la cantidad de llamadas; las mutaciones
 se miden una a una y el estado previo se restablece con `deshacer` fuera del
-intervalo. Generar los CSV, cargar la red, HTTP y renderizar quedan fuera de
+intervalo. Para que las razones sean estables, las tres redes se preparan
+primero y se mide en 5 rondas alternando n, 2n y 4n (una pausa del computador
+afecta a los tres tamaños por igual), y el recolector de basura se apaga
+mientras se cronometra, como hace `timeit`. Se usa Python 3.12: con 3.9 (el
+que trae macOS) no se instalan las dependencias. Generar los CSV, cargar la red, HTTP y renderizar quedan fuera de
 la medición. Antes de medir se comprueba el resultado de una llamada de cada
 caso. Para cada serie se reporta la razón de medianas 2n/n y 4n/2n, junto
 con la complejidad esperada y el análisis de la operación.

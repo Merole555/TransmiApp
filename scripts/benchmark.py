@@ -6,6 +6,7 @@ Uso desde la raíz:
 
 import argparse
 import csv
+import gc
 import json
 import os
 import platform
@@ -22,6 +23,7 @@ sys.path.insert(0, str(RAIZ))
 from motor import Red, simular_fila  # noqa: E402
 
 SEMILLA = 42
+RONDAS = 5   # rondas alternando los tamaños
 K = 10
 
 
@@ -93,27 +95,39 @@ def red_ruta_larga(carpeta, n):
 
 
 def medir_consulta(funcion, veces, repeticiones):
-    """Mediana de ns por llamada, midiendo lotes de varias llamadas."""
+    """Mediana de ns por llamada, midiendo lotes de varias llamadas.
+
+    Igual que timeit, se apaga el recolector de basura mientras se mide para
+    que una pausa suya no se cuele en una muestra.
+    """
     for _ in range(veces):
         funcion()  # calentamiento
     muestras = []
-    for _ in range(repeticiones):
-        inicio = time.perf_counter_ns()
-        for _ in range(veces):
-            funcion()
-        muestras.append((time.perf_counter_ns() - inicio) / veces)
+    gc.disable()
+    try:
+        for _ in range(repeticiones):
+            inicio = time.perf_counter_ns()
+            for _ in range(veces):
+                funcion()
+            muestras.append((time.perf_counter_ns() - inicio) / veces)
+    finally:
+        gc.enable()
     return statistics.median(muestras)
 
 
 def medir_mutacion(antes, funcion, despues, repeticiones):
     """Mide una sola llamada por muestra. antes y despues no se cuentan."""
     muestras = []
-    for _ in range(repeticiones):
-        antes()
-        inicio = time.perf_counter_ns()
-        funcion()
-        muestras.append(time.perf_counter_ns() - inicio)
-        despues()
+    gc.disable()
+    try:
+        for _ in range(repeticiones):
+            antes()
+            inicio = time.perf_counter_ns()
+            funcion()
+            muestras.append(time.perf_counter_ns() - inicio)
+            despues()
+    finally:
+        gc.enable()
     return statistics.median(muestras)
 
 
@@ -257,21 +271,36 @@ def ejecutar(tamanos=(1000, 2000, 4000), repeticiones=7, solo=None):
         serie = {"operacion": operacion, "variable": variable, "complejidad": complejidad,
                  "analisis": analisis, "puntos": []}
         try:
-            anterior = None
+            # 1. Se preparan las redes de los tres tamaños (fuera de la medición)
+            redes = []
+            dimensiones = []
             for n in tamanos:
                 if crear_red is None:
-                    mediana = caso(n, repeticiones)
-                    dimensiones = {"pasajeros": n}
+                    redes.append(None)
+                    dimensiones.append({"pasajeros": n})
                 else:
                     if Red is None:
                         raise RuntimeError("Red todavía no está en el motor")
                     with tempfile.TemporaryDirectory() as carpeta:
-                        dimensiones = crear_red(carpeta, n)
-                        red = Red(carpeta)
-                    mediana = caso(red, n, repeticiones)
+                        dimensiones.append(crear_red(carpeta, n))
+                        redes.append(Red(carpeta))
+
+            # 2. Se mide por rondas alternando n, 2n y 4n. Así, si el computador
+            #    se pone lento un momento, afecta a los tres tamaños por igual.
+            medidas = [[] for _ in tamanos]
+            for _ in range(RONDAS):
+                for i in range(len(tamanos)):
+                    if redes[i] is None:
+                        medidas[i].append(caso(tamanos[i], repeticiones))
+                    else:
+                        medidas[i].append(caso(redes[i], tamanos[i], repeticiones))
+
+            anterior = None
+            for i in range(len(tamanos)):
+                mediana = statistics.median(medidas[i])
                 razon = None if anterior is None else round(mediana / anterior, 2)
-                serie["puntos"].append({"n": n, "mediana_ns": round(mediana, 1),
-                                        "razon_anterior": razon, "dimensiones": dimensiones})
+                serie["puntos"].append({"n": tamanos[i], "mediana_ns": round(mediana, 1),
+                                        "razon_anterior": razon, "dimensiones": dimensiones[i]})
                 anterior = mediana
             razones = [str(p["razon_anterior"]) for p in serie["puntos"][1:]]
             serie["analisis"] += " Razones observadas: " + ", ".join(razones) + "."
@@ -284,6 +313,7 @@ def ejecutar(tamanos=(1000, 2000, 4000), repeticiones=7, solo=None):
         "configuracion": {
             "semilla": SEMILLA,
             "repeticiones": repeticiones,
+            "rondas": RONDAS,
             "tamanos": ", ".join(str(t) for t in tamanos),
             "unidad": "ns/llamada",
             "python": platform.python_version(),
@@ -307,6 +337,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--salida", default="scripts/resultados/rendimiento.json")
     parser.add_argument("--n", type=int, default=1000)
+    parser.add_argument("--repeticiones", type=int, default=7)
     parser.add_argument("--rapido", action="store_true", help="tamaños pequeños para probar")
     parser.add_argument("--solo", nargs="*")
     args = parser.parse_args()
@@ -314,6 +345,6 @@ if __name__ == "__main__":
     if args.rapido:
         resultados = ejecutar((100, 200, 400), 3, args.solo)
     else:
-        resultados = ejecutar((args.n, 2 * args.n, 4 * args.n), 7, args.solo)
+        resultados = ejecutar((args.n, 2 * args.n, 4 * args.n), args.repeticiones, args.solo)
     guardar(resultados, args.salida)
     print("Guardado en", args.salida)
