@@ -66,6 +66,21 @@ llegan por HTTP se convierten a mayúsculas y se recortan los espacios
 externos antes de consultar o modificar la red (`t1` y `T1` equivalen);
 el motor y los CSV mantienen sus IDs originales.
 
+## Desempate de itinerarios (R5)
+
+R5 minimiza los **saltos entre estaciones**. Si hay empate, prefiere
+el recorrido directo (sin transbordo); si el número de transbordos también
+es igual, elige la secuencia de tramos menor en orden lexicográfico
+(`ruta`, `sube`, `baja`). Por ejemplo, con la misma cantidad de saltos,
+`B74` tiene prioridad sobre `Z99` entre rutas directas, sin depender
+del orden de carga de los CSV. La API devuelve **un solo itinerario**.
+
+R5 no pondera hora de salida, duración real, tráfico, frecuencia ni cantidad
+de buses de R6: una ruta elegida por desempate no necesariamente será la
+más rápida. Hay pruebas específicas para empates directo/transbordo, dos
+puntos de transbordo, estaciones cerradas, ocurrencias repetidas y
+membresías notificadas más de una vez.
+
 ## Medición de rendimiento (R11)
 
 ```bash
