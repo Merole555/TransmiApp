@@ -112,6 +112,65 @@ con la complejidad esperada y el análisis de la operación.
 - **Relación con R11.** Las series `autocompletar` y `rango` duplican las
   estaciones con k = 10 y s = 10 fijos; se espera razón poco mayor que 1.
 
+### R4 · `proximo_bus(estacion, ruta, hora)` — miembro 2
+
+- **Contrato.** Devuelve el primer horario mayor o igual a `hora`, o `None` si
+  no hay paso disponible, la estación no está abierta o la ruta no se detiene
+  allí. Acepta horas extendidas `HH:MM` (00–99 horas, 00–59 minutos) y
+  conserva horarios repetidos; entradas inválidas producen `ValueError`.
+- **Estructura.** Tabla hash propia con clave `(ruta, estación)` y una lista
+  ordenada de minutos enteros por pareja.
+- **Algoritmo.** `indexar_horarios` usa mergesort propio para preparar las
+  listas; la consulta aplica búsqueda binaria manual del límite inferior y
+  reconstruye `HH:MM` con dos dígitos por componente.
+- **Alternativa descartada.** Buscar el siguiente bus recorriendo linealmente
+  los H horarios en cada consulta.
+- **Complejidad.** Ordenación O(H log H) y O(H) espacio auxiliar por lista;
+  consulta O(log H) más la búsqueda hash promedio.
+- **Relación con R11.** La medición `proximo_bus` incrementa los horarios
+  por pareja y comprueba el crecimiento de la consulta.
+
+### R5 · `viaje(origen, destino)` — miembro 2
+
+- **Contrato.** Devuelve `None` o una tupla
+  `(tipo, saltos, tramos)`, con tipo `DIRECTO` o `TRANSBORDO`.
+  Admite como máximo un transbordo y solo avanza en el sentido del recorrido.
+  Las estaciones cerradas cuentan como paradas intermedias, pero no sirven
+  para subir, bajar o cambiar de ruta.
+- **Estructura.** Índice compartido estación → ocurrencias `(ruta, nodo)`,
+  con nodos enlazados que conservan estaciones repetidas y el sentido de la
+  ruta.
+- **Algoritmo.** Examina viajes directos desde cada ocurrencia del origen y
+  posibilidades de transbordo en estaciones abiertas. Conserva el candidato
+  con menos saltos; ante empate prefiere un directo y aplica desempate
+  lexicográfico de sus tramos.
+- **Alternativa descartada.** Reconstruir un grafo completo para cada consulta.
+- **Complejidad.** Cota conservadora O(I · P · (1 + C · P)), donde I es el
+  número de salidas posibles del origen, P el máximo de paradas por ruta y C
+  el número de salidas candidatas en cada transbordo. No incluye la carga de
+  los índices compartidos.
+- **Relación con R11.** El benchmark `viaje` mide el tiempo de planificación.
+
+### R6 · `ranking(k)` — miembro 2
+
+- **Contrato.** Devuelve hasta k pares nuevos `(estación, buses_diarios)`,
+  solo de estaciones abiertas, en orden descendente de buses y con desempate
+  alfabético. Para k no positivo devuelve `[]`. Cuenta todos los pasos
+  de horario registrados, incluidos los repetidos.
+- **Estructura.** Tabla hash propia con `(conteo, abierta)` por estación y
+  arreglo ordenado de claves `(-conteo, nombre)` para las abiertas.
+- **Algoritmo.** La búsqueda binaria manual localiza la clave que se elimina
+  o inserta tras cada cierre, reapertura o transición de membresía de ruta.
+  El conteo de estaciones cerradas se conserva. La consulta lee las primeras
+  k entradas y devuelve una lista nueva.
+- **Alternativa descartada.** Ordenar todas las estaciones en cada consulta;
+  el árbol AVL para ranking no se emplea en el diseño aprobado.
+- **Complejidad.** Consulta O(min(k, n)) con n abiertas y actualización O(n)
+  por desplazamiento del arreglo, aunque la búsqueda de posición es
+  O(log n). Espacio O(n) más la tabla hash.
+- **Relación con R11.** La serie `ranking` mide las consultas con k fijo;
+  los cierres y reaperturas también se miden mediante sus propias series.
+
 ### R10 · `simular_fila(llegadas, frecuencia, capacidad)` — miembro 4
 
 - **Contrato.** Devuelve una lista nueva con la espera de cada persona, en
@@ -137,10 +196,6 @@ con la complejidad esperada y el análisis de la operación.
   por la lista de salida y O(1) auxiliar.
 - **Relación con R11.** La serie `simular_fila` usa frecuencia 5 y capacidad
   40 fijas y n creciente; se espera razón ≈ 2 al duplicar n.
-
-### R1–R9
-
-(falta completar algunos R)
 
 ### R7 · `agregar_parada`, `quitar_parada`, `recorrido` — miembro 3
 
