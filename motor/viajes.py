@@ -1,5 +1,7 @@
 """Consultas de viajes y mantenimiento de sus índices."""
 
+from .estructuras import TablaHash
+
 
 def minuto_del_dia(hora):
     if (
@@ -139,6 +141,8 @@ class RankingEstaciones:
         self._estaciones = estaciones
         self._orden = []
         self._horarios = horarios
+        # Protege el conteo si un integrador repite una transición efectiva.
+        self._membresias_activas = TablaHash()
 
     def _posicion(self, clave):
         inicio = 0
@@ -160,6 +164,8 @@ class RankingEstaciones:
             self._orden.pop(posicion)
 
     def registrar(self, estacion):
+        if self._estaciones.obtener(estacion) is not None:
+            return
         self._estaciones.asignar(estacion, (0, True))
         self._insertar((0, estacion))
 
@@ -176,13 +182,22 @@ class RankingEstaciones:
 
     def cambiar_membresia(self, ruta, estacion, activa):
         """Actualiza la contribución al pasar entre 0 y >=1 ocurrencias."""
-        minutos = self._horarios.obtener((ruta, estacion))
+        par = (ruta, estacion)
+        minutos = self._horarios.obtener(par)
         if not minutos:
+            return
+        anterior = self._membresias_activas.contiene(par)
+        if anterior == activa:
             return
         cantidad, abierta = self._estaciones.obtener(estacion)
         if abierta:
             self._quitar((-cantidad, estacion))
-        cantidad += len(minutos) if activa else -len(minutos)
+        if activa:
+            cantidad += len(minutos)
+            self._membresias_activas.asignar(par, True)
+        else:
+            cantidad -= len(minutos)
+            self._membresias_activas.eliminar(par)
         self._estaciones.asignar(estacion, (cantidad, abierta))
         if abierta:
             self._insertar((-cantidad, estacion))
