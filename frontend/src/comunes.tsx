@@ -67,11 +67,13 @@ export function Resultado<T>({ estado, children }: { estado: EstadoPeticion<T>; 
   return <div className="resultado" aria-live="polite">{children(estado.datos)}</div>
 }
 
-export function ListaEstaciones({ estaciones }: { estaciones: string[] }) {
+export function ListaEstaciones({ estaciones, resaltar }: { estaciones: string[]; resaltar?: string }) {
   if (estaciones.length === 0) return <p className="vacio">Sin resultados.</p>
   return (
     <ol className="lista-estaciones">
-      {estaciones.map((nombre, i) => <li key={`${nombre}-${i}`}>{nombre}</li>)}
+      {estaciones.map((nombre, i) => (
+        <li key={`${nombre}-${i}`} className={resaltar && nombre === resaltar ? 'resaltada' : undefined}>{nombre}</li>
+      ))}
     </ol>
   )
 }

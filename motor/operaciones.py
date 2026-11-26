@@ -29,6 +29,16 @@ class Registro:
         self.siguiente = siguiente
         self.posicion = None          # lugar que ocupaba en red.paradas[estacion]
 
+    def texto(self):
+        """Descripción corta para mostrar el historial en la interfaz."""
+        if self.accion == "agregar":
+            return f"Agregar {self.estacion} después de {self.anterior.estacion} en {self.ruta}"
+        if self.accion == "quitar":
+            return f"Quitar {self.estacion} de {self.ruta}"
+        if self.accion == "cerrar":
+            return f"Cerrar {self.estacion}"
+        return f"Reabrir {self.estacion}"
+
 
 class EstadoOperaciones:
     def __init__(self, red):
@@ -230,3 +240,53 @@ def rehacer(red):
     _aplicar(red, estado, registro)
     estado.deshacer.apilar(registro)
     return True
+
+
+# ---------------------------------------------------------------- consultas para la interfaz
+
+LIMITE_HISTORIAL = 20
+
+
+def _ordenar(nombres):
+    """Mergesort de cadenas (no se puede usar sorted)."""
+    if len(nombres) < 2:
+        return nombres
+    mitad = len(nombres) // 2
+    izquierda = _ordenar(nombres[:mitad])
+    derecha = _ordenar(nombres[mitad:])
+    resultado = []
+    i = j = 0
+    while i < len(izquierda) and j < len(derecha):
+        if izquierda[i] <= derecha[j]:
+            resultado.append(izquierda[i])
+            i += 1
+        else:
+            resultado.append(derecha[j])
+            j += 1
+    resultado.extend(izquierda[i:])
+    resultado.extend(derecha[j:])
+    return resultado
+
+
+def listar_cerradas(red):
+    """Estaciones cerradas en orden alfabético. O(n + k log k)."""
+    cerradas = []
+    for nombre in red.estaciones.claves():
+        if red.estaciones.obtener(nombre) is False:
+            cerradas.append(nombre)
+    return _ordenar(cerradas)
+
+
+def _textos(pila):
+    resultado = []
+    indice = len(pila.datos) - 1
+    while indice >= 0 and len(resultado) < LIMITE_HISTORIAL:
+        resultado.append(pila.datos[indice].texto())
+        indice -= 1
+    return resultado
+
+
+def historial(red):
+    """(acciones que se pueden deshacer, acciones que se pueden rehacer), la más reciente primero."""
+    estado = preparar(red)
+    return _textos(estado.deshacer), _textos(estado.rehacer)

@@ -11,22 +11,45 @@ function formatoNs(ns: number) {
   return `${ns.toFixed(0)} ns`
 }
 
-/** Gráfico SVG de mediana (ns/llamada) contra n. Sin librerías externas. */
-function Grafico({ serie }: { serie: SerieRendimiento }) {
+/** Razón esperada de 2n/n según la complejidad de cada operación. */
+function esperado(operacion: string): { razon: number; texto: string } {
+  if (operacion === 'recorrido' || operacion === 'recorrido_inverso' || operacion === 'simular_fila') {
+    return { razon: 2, texto: 'crecimiento lineal: ≈ 2× al duplicar n' }
+  }
+  return { razon: 1, texto: 'casi constante o logarítmico: ≈ 1× al duplicar n' }
+}
+
+/** Verde si la razón observada es coherente con la esperada, amarillo si se acerca, rojo si se aleja. */
+function clasificar(observada: number, razon: number): 'bien' | 'advertencia' | 'mal' {
+  const f = observada / razon
+  if (f >= 0.75 && f <= 1.3) return 'bien'
+  if (f >= 0.55 && f <= 1.6) return 'advertencia'
+  return 'mal'
+}
+
+/** Gráfico SVG de mediana (ns/llamada) contra n, con la línea de crecimiento ideal. */
+function Grafico({ serie, razon }: { serie: SerieRendimiento; razon: number }) {
   const puntos = serie.puntos
   if (puntos.length === 0) return <p className="vacio">La serie no tiene puntos.</p>
   const ancho = 560, alto = 260, margen = { izq: 70, der: 20, sup: 16, inf: 40 }
+  const base = puntos[0]
+  const ideal = (n: number) => (razon === 2 ? base.mediana_ns * (n / (base.n || 1)) : base.mediana_ns)
   let maxN = 0, maxY = 0
-  for (const p of puntos) { if (p.n > maxN) maxN = p.n; if (p.mediana_ns > maxY) maxY = p.mediana_ns }
+  for (const p of puntos) {
+    if (p.n > maxN) maxN = p.n
+    if (p.mediana_ns > maxY) maxY = p.mediana_ns
+    if (ideal(p.n) > maxY) maxY = ideal(p.n)
+  }
   maxY = maxY * 1.1 || 1
   const x = (n: number) => margen.izq + (n / (maxN || 1)) * (ancho - margen.izq - margen.der)
   const y = (v: number) => alto - margen.inf - (v / maxY) * (alto - margen.sup - margen.inf)
   const marcasY = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxY)
-  const camino = puntos.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.n).toFixed(1)},${y(p.mediana_ns).toFixed(1)}`).join(' ')
+  const trazo = (valor: (n: number, mediana: number) => number) =>
+    puntos.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.n).toFixed(1)},${y(valor(p.n, p.mediana_ns)).toFixed(1)}`).join(' ')
 
   return (
     <svg viewBox={`0 0 ${ancho} ${alto}`} className="grafico" role="img"
-      aria-label={`Mediana por llamada de ${serie.operacion} según n`}>
+      aria-label={`Mediana por llamada de ${serie.operacion} según n, con la línea de crecimiento ideal`}>
       {marcasY.map((v) => (
         <g key={v}>
           <line x1={margen.izq} x2={ancho - margen.der} y1={y(v)} y2={y(v)} className="guia" />
@@ -37,7 +60,8 @@ function Grafico({ serie }: { serie: SerieRendimiento }) {
         <text key={`n-${p.n}`} x={x(p.n)} y={alto - margen.inf + 18} textAnchor="middle">{p.n}</text>
       ))}
       <text x={(ancho + margen.izq) / 2} y={alto - 4} textAnchor="middle" className="eje">n</text>
-      <path d={camino} className="linea" />
+      <path d={trazo((n) => ideal(n))} className="referencia" />
+      <path d={trazo((_, mediana) => mediana)} className="linea" />
       {puntos.map((p) => (
         <circle key={`p-${p.n}`} cx={x(p.n)} cy={y(p.mediana_ns)} r={4} className="punto">
           <title>{`n=${p.n}: ${formatoNs(p.mediana_ns)}`}</title>
@@ -82,6 +106,7 @@ export function Rendimiento() {
           const datos = estado.datos
           const serie = datos.series[Math.min(seleccion, datos.series.length - 1)]
           if (!serie) return <p className="vacio">El archivo no contiene series.</p>
+          const ref = esperado(serie.operacion)
           return (
             <>
               <label className="campo">
@@ -93,10 +118,14 @@ export function Rendimiento() {
               <dl className="ficha">
                 <div><dt>Complejidad esperada</dt><dd>{serie.complejidad}</dd></div>
                 <div><dt>Significado de n</dt><dd>{serie.variable}</dd></div>
+                <div><dt>Razón 2n/n esperada</dt><dd>≈ {ref.razon}×</dd></div>
               </dl>
               {serie.error ? <p className="error" role="alert">No se pudo medir: {serie.error}</p> : (
                 <>
-                  <Grafico serie={serie} />
+                  <Grafico serie={serie} razon={ref.razon} />
+                  <p className="nota">
+                    Línea sólida: medición. Línea punteada: {ref.texto}, desde el primer punto.
+                  </p>
                   <table>
                     <caption>Mediana por llamada y razón respecto al tamaño anterior</caption>
                     <thead>
@@ -107,12 +136,18 @@ export function Rendimiento() {
                         <tr key={p.n}>
                           <td className="num">{p.n}</td>
                           <td className="num">{formatoNs(p.mediana_ns)}</td>
-                          <td className="num">{p.razon_anterior === null ? '—' : `${p.razon_anterior.toFixed(2)}×`}</td>
+                          <td className={`num ${p.razon_anterior === null ? '' : clasificar(p.razon_anterior, ref.razon)}`}>
+                            {p.razon_anterior === null ? '—' : `${p.razon_anterior.toFixed(2)}×`}
+                          </td>
                           <td>{Object.entries(p.dimensiones).map(([k, v]) => `${k}=${v}`).join(', ')}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  <p className="nota">
+                    Razón en verde: coherente con la complejidad esperada. Amarillo: cercana. Rojo: alejada;
+                    puede ser ruido de la medición o una complejidad distinta a la esperada.
+                  </p>
                 </>
               )}
               <h3>Análisis</h3>

@@ -4,6 +4,7 @@ import { Campo, Formulario, Resultado, Tarjeta } from '../comunes'
 import { usePeticion } from '../usePeticion'
 
 const POR_PAGINA = 20
+const MAX_BARRAS = 120
 
 function leerLlegadas(texto: string): number[] {
   const partes = texto.split(/[\s,;]+/).filter((p) => p !== '')
@@ -11,6 +12,45 @@ function leerLlegadas(texto: string): number[] {
     if (!/^-?\d+$/.test(p)) throw new Error(`"${p}" no es un minuto entero`)
     return Number(p)
   })
+}
+
+/** Barras SVG con la espera de cada persona, en orden de llegada. */
+function GraficoEsperas({ esperas }: { esperas: number[] }) {
+  const datos = esperas.slice(0, MAX_BARRAS)
+  if (datos.length === 0) return null
+  let maximo = 0
+  for (const e of datos) if (e > maximo) maximo = e
+  const escala = maximo === 0 ? 1 : maximo
+  const ancho = 560, alto = 200
+  const margen = { izq: 40, der: 10, sup: 10, inf: 28 }
+  const paso = (ancho - margen.izq - margen.der) / datos.length
+  const grosor = Math.max(1, paso - 2)
+  const alturaUtil = alto - margen.sup - margen.inf
+  const y = (v: number) => alto - margen.inf - (v / escala) * alturaUtil
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${ancho} ${alto}`} className="grafico" role="img"
+        aria-label="Espera de cada persona en orden de llegada">
+        <line x1={margen.izq} x2={ancho - margen.der} y1={y(0)} y2={y(0)} className="guia" />
+        <line x1={margen.izq} x2={ancho - margen.der} y1={y(maximo)} y2={y(maximo)} className="guia" />
+        <text x={margen.izq - 6} y={y(0) + 4} textAnchor="end">0</text>
+        <text x={margen.izq - 6} y={y(maximo) + 4} textAnchor="end">{maximo}</text>
+        {datos.map((espera, i) => (
+          <rect key={i} x={margen.izq + i * paso + 1} y={y(espera)} width={grosor}
+            height={Math.max(0, y(0) - y(espera))} className="barra">
+            <title>{`Persona ${i}: espera ${espera} min`}</title>
+          </rect>
+        ))}
+        <text x={(ancho + margen.izq) / 2} y={alto - 6} textAnchor="middle" className="eje">
+          Persona (orden de llegada) · espera en minutos
+        </text>
+      </svg>
+      {esperas.length > MAX_BARRAS && (
+        <p className="nota">Se muestran las primeras {MAX_BARRAS} de {esperas.length} personas.</p>
+      )}
+    </div>
+  )
 }
 
 /** R10: simulación de la fila de abordaje. El cálculo lo hace el motor. */
@@ -56,6 +96,7 @@ export function Fila() {
                   <div><dt>Promedio</dt><dd>{datos.espera_promedio.toFixed(2)} min</dd></div>
                   <div><dt>Máxima</dt><dd>{datos.espera_maxima} min</dd></div>
                 </dl>
+                <GraficoEsperas esperas={datos.esperas} />
                 {datos.esperas.length > 0 && (
                   <>
                     <table>

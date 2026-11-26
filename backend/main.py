@@ -177,7 +177,18 @@ def crear_app(
         except FileNotFoundError as error:
             raise HTTPException(404, "No hay resultados de rendimiento") from error
 
+    @aplicacion.get("/api/rutas")
+    def rutas():
+        return {"rutas": consultar("listar_rutas")}
+
+    @aplicacion.get("/api/cerradas")
+    def cerradas():
+        return {"estaciones": consultar("listar_cerradas")}
+
+    @aplicacion.get("/api/historial")
+    def historial():
+        pasadas, futuras = consultar("historial")
+        return {"deshacer": pasadas, "rehacer": futuras}
+        
     return aplicacion
-
-
 app = crear_app()
