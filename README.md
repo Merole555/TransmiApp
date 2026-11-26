@@ -81,6 +81,18 @@ más rápida. Hay pruebas específicas para empates directo/transbordo, dos
 puntos de transbordo, estaciones cerradas, ocurrencias repetidas y
 membresías notificadas más de una vez.
 
+## Funciones adicionales de la interfaz
+
+Tras la integración del frontend actualizado, la aplicación incluye un
+selector de tema claro/oscuro, sugerencias de estaciones y rutas,
+consulta de estaciones cerradas, visualización del historial reciente
+para deshacer/rehacer y gráficos de espera de la fila y rendimiento.
+
+Los endpoints auxiliares `GET /api/rutas`, `GET /api/cerradas` y
+`GET /api/historial` proporcionan datos a estas vistas. Las listas y
+el historial se consultan desde la API; el frontend no modifica
+directamente las estructuras del motor.
+
 ## Verificación antes de entregar
 
 El repositorio incluye los tres CSV en `datos/`, pruebas Python de R1–R11,
