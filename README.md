@@ -81,6 +81,67 @@ más rápida. Hay pruebas específicas para empates directo/transbordo, dos
 puntos de transbordo, estaciones cerradas, ocurrencias repetidas y
 membresías notificadas más de una vez.
 
+## Funciones adicionales de la interfaz
+
+Tras la integración del frontend actualizado, la aplicación incluye un
+selector de tema claro/oscuro, sugerencias de estaciones y rutas,
+consulta de estaciones cerradas, visualización del historial reciente
+para deshacer/rehacer y gráficos de espera de la fila y rendimiento.
+
+Los endpoints auxiliares `GET /api/rutas`, `GET /api/cerradas` y
+`GET /api/historial` proporcionan datos a estas vistas. Las listas y
+el historial se consultan desde la API; el frontend no modifica
+directamente las estructuras del motor.
+
+## Verificación antes de entregar
+
+El repositorio incluye los tres CSV en `datos/`, pruebas Python de R1–R11,
+pruebas de estrés y el frontend React. La integración continua de
+`.github/workflows/pruebas.yml` ejecuta **Python**, pero todavía no
+comprueba automáticamente la compilación ni el análisis estático del frontend.
+
+Desde la raíz del proyecto y con Python 3.12 y Node 22.12+ instalados:
+
+```powershell
+# Windows PowerShell: instalar dependencias si es la primera ejecución
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+npm.cmd --prefix frontend ci
+
+# Probar motor, API, estrés y frontend
+.\.venv\Scripts\python.exe -m unittest discover -s scripts/pruebas -p "test_*.py" -v
+npm.cmd --prefix frontend run build
+npm.cmd --prefix frontend run lint
+
+# Iniciar API y frontend en el equipo local
+.\.venv\Scripts\python.exe scripts/iniciar.py
+```
+
+Abrir `http://127.0.0.1:5173` y comprobar búsquedas, rutas, transbordos,
+edición, cierre/reapertura, deshacer/rehacer, fila y rendimiento. En particular,
+consultar una ruta con minúsculas debe producir la misma respuesta que con
+mayúsculas; R5 desempata por menor número de saltos, después por menor número
+de transbordos y finalmente por orden lexicográfico de tramos.
+
+**Nota:** aprobar las pruebas Python no certifica por sí solo el build de React
+ni sustituye una comprobación manual del recorrido completo con los CSV reales.
+
+## Cómo compartir el proyecto
+
+- **Ver código:** el repositorio
+  [Merole555/TransmiApp](https://github.com/Merole555/TransmiApp) es público;
+  basta enviar ese enlace. No hay que subir nuevamente sus archivos.
+- **Ejecutarlo en otro computador:** instalar Git, Python 3.12 y Node 22.12+,
+  clonar con `git clone https://github.com/Merole555/TransmiApp.git`,
+  entrar con `cd TransmiApp`, seguir «Instalación» y usar
+  `scripts/iniciar.py`. La web se ejecuta localmente; compartir el enlace
+  del repositorio **no** publica una aplicación web en Internet.
+- **Descargar una copia:** en GitHub, `Code → Download ZIP`; descomprimir
+  y seguir las instrucciones de instalación.
+- **Permitir cambios de otra persona:** añadirla como colaboradora en
+  `Settings → Collaborators` (o gestionar acceso del repositorio).
+  Para una revisión sin permisos de escritura, compartir únicamente el enlace.
+
 ## Medición de rendimiento (R11)
 
 ```bash
