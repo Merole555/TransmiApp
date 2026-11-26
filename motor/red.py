@@ -224,3 +224,15 @@ class Red:
 
     def rehacer(self):
         return self._operaciones().rehacer(self)
+    
+    def listar_rutas(self):
+        resultado = []
+        for ruta in self.nombres_rutas:
+            resultado.append(ruta)
+        return resultado
+
+    def listar_cerradas(self):
+        return self._operaciones().listar_cerradas(self)
+
+    def historial(self):
+        return self._operaciones().historial(self)

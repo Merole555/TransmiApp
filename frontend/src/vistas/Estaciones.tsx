@@ -81,8 +81,8 @@ export function Estaciones({ version }: { version: number }) {
 
       <Tarjeta titulo="Rango alfabético" requisito="R3">
         <Formulario boton="Buscar rango" onEnviar={() => buscarRango(desde, hasta)} ocupado={rango.tipo === 'cargando'}>
-          <Campo etiqueta="Desde" valor={desde} onCambio={setDesde} />
-          <Campo etiqueta="Hasta" valor={hasta} onCambio={setHasta} />
+          <Campo etiqueta="Desde" valor={desde} onCambio={setDesde} lista="lista-estaciones" />
+          <Campo etiqueta="Hasta" valor={hasta} onCambio={setHasta} lista="lista-estaciones" />
         </Formulario>
         <Resultado estado={rango}>{(lista) => <ListaEstaciones estaciones={lista} />}</Resultado>
       </Tarjeta>

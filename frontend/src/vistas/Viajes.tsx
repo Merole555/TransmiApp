@@ -3,6 +3,11 @@ import { api, type FilaRanking, type Viaje } from '../api'
 import { Campo, Formulario, Resultado, Tarjeta } from '../comunes'
 import { usePeticion } from '../usePeticion'
 
+function horaActual() {
+  const ahora = new Date()
+  return `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`
+}
+
 /** R4–R6: próximo bus, plan de viaje y ranking de estaciones. */
 export function Viajes({ version }: { version: number }) {
   const [estacion, setEstacion] = useState('')
@@ -45,9 +50,10 @@ export function Viajes({ version }: { version: number }) {
     <div className="rejilla">
       <Tarjeta titulo="Próximo bus" requisito="R4">
         <Formulario boton="Buscar" onEnviar={() => buscarBus(estacion, ruta, hora)} ocupado={bus.tipo === 'cargando'}>
-          <Campo etiqueta="Estación" valor={estacion} onCambio={setEstacion} />
-          <Campo etiqueta="Ruta" valor={ruta} onCambio={setRuta} marcador="Identificador exacto" />
+          <Campo etiqueta="Estación" valor={estacion} onCambio={setEstacion} lista="lista-estaciones" />
+          <Campo etiqueta="Ruta" valor={ruta} onCambio={setRuta} lista="lista-rutas" marcador="Identificador exacto" />
           <Campo etiqueta="Hora (HH:MM)" valor={hora} onCambio={setHora} marcador="08:00" />
+          <button type="button" className="secundario" onClick={() => setHora(horaActual())}>Ahora</button>
         </Formulario>
         <Resultado estado={bus}>
           {(h) => h === null
@@ -58,8 +64,11 @@ export function Viajes({ version }: { version: number }) {
 
       <Tarjeta titulo="Planear viaje" requisito="R5">
         <Formulario boton="Planear" onEnviar={() => buscarPlan(origen, destino)} ocupado={plan.tipo === 'cargando'}>
-          <Campo etiqueta="Origen" valor={origen} onCambio={setOrigen} />
-          <Campo etiqueta="Destino" valor={destino} onCambio={setDestino} />
+          <Campo etiqueta="Origen" valor={origen} onCambio={setOrigen} lista="lista-estaciones" />
+          <button type="button" className="secundario intercambiar" aria-label="Intercambiar origen y destino"
+            title="Intercambiar origen y destino"
+            onClick={() => { setOrigen(destino); setDestino(origen) }}>⇄</button>
+          <Campo etiqueta="Destino" valor={destino} onCambio={setDestino} lista="lista-estaciones" />
         </Formulario>
         <Resultado estado={plan}>
           {(v) => v === null
