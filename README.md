@@ -45,6 +45,42 @@ npm --prefix frontend run build
 npm --prefix frontend run lint
 ```
 
+## Pruebas de estrés e integración (R1–R11)
+
+Las pruebas reproducibles están en `scripts/pruebas/test_estres.py`.
+Usan CSV sintéticos temporales (400 estaciones y dos rutas conectadas),
+consultas repetidas, ediciones y reversión, una fila de 20.000 pasajeros,
+la API real y las 15 series de R11 con tamaños reducidos. No dependen
+de los CSV del profesor ni imponen umbrales de tiempo sensibles a la CPU.
+
+```bash
+# Desde la raíz del repositorio y con las dependencias de backend instaladas
+python -m unittest discover -s scripts/pruebas -p "test_estres.py" -v
+# Suite completa (incluye estas pruebas)
+python -m unittest discover -s scripts/pruebas -p "test_*.py" -v
+```
+
+Para datos reales, conservar también la validación manual de arranque,
+consultas y operaciones desde la web. Los identificadores de ruta que
+llegan por HTTP se convierten a mayúsculas y se recortan los espacios
+externos antes de consultar o modificar la red (`t1` y `T1` equivalen);
+el motor y los CSV mantienen sus IDs originales.
+
+## Desempate de itinerarios (R5)
+
+R5 minimiza los **saltos entre estaciones**. Si hay empate, prefiere
+el recorrido directo (sin transbordo); si el número de transbordos también
+es igual, elige la secuencia de tramos menor en orden lexicográfico
+(`ruta`, `sube`, `baja`). Por ejemplo, con la misma cantidad de saltos,
+`B74` tiene prioridad sobre `Z99` entre rutas directas, sin depender
+del orden de carga de los CSV. La API devuelve **un solo itinerario**.
+
+R5 no pondera hora de salida, duración real, tráfico, frecuencia ni cantidad
+de buses de R6: una ruta elegida por desempate no necesariamente será la
+más rápida. Hay pruebas específicas para empates directo/transbordo, dos
+puntos de transbordo, estaciones cerradas, ocurrencias repetidas y
+membresías notificadas más de una vez.
+
 ## Medición de rendimiento (R11)
 
 ```bash
@@ -61,7 +97,11 @@ operación (estaciones, horarios por par o paradas de la ruta). Se usa
 `time.perf_counter_ns`, calentamiento, 7 muestras y mediana. Las consultas se
 cronometran en lotes y se divide por la cantidad de llamadas; las mutaciones
 se miden una a una y el estado previo se restablece con `deshacer` fuera del
-intervalo. Generar los CSV, cargar la red, HTTP y renderizar quedan fuera de
+intervalo. Para que las razones sean estables, las tres redes se preparan
+primero y se mide en 5 rondas alternando n, 2n y 4n (una pausa del computador
+afecta a los tres tamaños por igual), y el recolector de basura se apaga
+mientras se cronometra, como hace `timeit`. Se usa Python 3.12: con 3.9 (el
+que trae macOS) no se instalan las dependencias. Generar los CSV, cargar la red, HTTP y renderizar quedan fuera de
 la medición. Antes de medir se comprueba el resultado de una llamada de cada
 caso. Para cada serie se reporta la razón de medianas 2n/n y 4n/2n, junto
 con la complejidad esperada y el análisis de la operación.
@@ -108,6 +148,65 @@ con la complejidad esperada y el análisis de la operación.
 - **Relación con R11.** Las series `autocompletar` y `rango` duplican las
   estaciones con k = 10 y s = 10 fijos; se espera razón poco mayor que 1.
 
+### R4 · `proximo_bus(estacion, ruta, hora)` — miembro 2
+
+- **Contrato.** Devuelve el primer horario mayor o igual a `hora`, o `None` si
+  no hay paso disponible, la estación no está abierta o la ruta no se detiene
+  allí. Acepta horas extendidas `HH:MM` (00–99 horas, 00–59 minutos) y
+  conserva horarios repetidos; entradas inválidas producen `ValueError`.
+- **Estructura.** Tabla hash propia con clave `(ruta, estación)` y una lista
+  ordenada de minutos enteros por pareja.
+- **Algoritmo.** `indexar_horarios` usa mergesort propio para preparar las
+  listas; la consulta aplica búsqueda binaria manual del límite inferior y
+  reconstruye `HH:MM` con dos dígitos por componente.
+- **Alternativa descartada.** Buscar el siguiente bus recorriendo linealmente
+  los H horarios en cada consulta.
+- **Complejidad.** Ordenación O(H log H) y O(H) espacio auxiliar por lista;
+  consulta O(log H) más la búsqueda hash promedio.
+- **Relación con R11.** La medición `proximo_bus` incrementa los horarios
+  por pareja y comprueba el crecimiento de la consulta.
+
+### R5 · `viaje(origen, destino)` — miembro 2
+
+- **Contrato.** Devuelve `None` o una tupla
+  `(tipo, saltos, tramos)`, con tipo `DIRECTO` o `TRANSBORDO`.
+  Admite como máximo un transbordo y solo avanza en el sentido del recorrido.
+  Las estaciones cerradas cuentan como paradas intermedias, pero no sirven
+  para subir, bajar o cambiar de ruta.
+- **Estructura.** Índice compartido estación → ocurrencias `(ruta, nodo)`,
+  con nodos enlazados que conservan estaciones repetidas y el sentido de la
+  ruta.
+- **Algoritmo.** Examina viajes directos desde cada ocurrencia del origen y
+  posibilidades de transbordo en estaciones abiertas. Conserva el candidato
+  con menos saltos; ante empate prefiere un directo y aplica desempate
+  lexicográfico de sus tramos.
+- **Alternativa descartada.** Reconstruir un grafo completo para cada consulta.
+- **Complejidad.** Cota conservadora O(I · P · (1 + C · P)), donde I es el
+  número de salidas posibles del origen, P el máximo de paradas por ruta y C
+  el número de salidas candidatas en cada transbordo. No incluye la carga de
+  los índices compartidos.
+- **Relación con R11.** El benchmark `viaje` mide el tiempo de planificación.
+
+### R6 · `ranking(k)` — miembro 2
+
+- **Contrato.** Devuelve hasta k pares nuevos `(estación, buses_diarios)`,
+  solo de estaciones abiertas, en orden descendente de buses y con desempate
+  alfabético. Para k no positivo devuelve `[]`. Cuenta todos los pasos
+  de horario registrados, incluidos los repetidos.
+- **Estructura.** Tabla hash propia con `(conteo, abierta)` por estación y
+  arreglo ordenado de claves `(-conteo, nombre)` para las abiertas.
+- **Algoritmo.** La búsqueda binaria manual localiza la clave que se elimina
+  o inserta tras cada cierre, reapertura o transición de membresía de ruta.
+  El conteo de estaciones cerradas se conserva. La consulta lee las primeras
+  k entradas y devuelve una lista nueva.
+- **Alternativa descartada.** Ordenar todas las estaciones en cada consulta;
+  el árbol AVL para ranking no se emplea en el diseño aprobado.
+- **Complejidad.** Consulta O(min(k, n)) con n abiertas y actualización O(n)
+  por desplazamiento del arreglo, aunque la búsqueda de posición es
+  O(log n). Espacio O(n) más la tabla hash.
+- **Relación con R11.** La serie `ranking` mide las consultas con k fijo;
+  los cierres y reaperturas también se miden mediante sus propias series.
+
 ### R10 · `simular_fila(llegadas, frecuencia, capacidad)` — miembro 4
 
 - **Contrato.** Devuelve una lista nueva con la espera de cada persona, en
@@ -133,10 +232,6 @@ con la complejidad esperada y el análisis de la operación.
   por la lista de salida y O(1) auxiliar.
 - **Relación con R11.** La serie `simular_fila` usa frecuencia 5 y capacidad
   40 fijas y n creciente; se espera razón ≈ 2 al duplicar n.
-
-### R1–R9
-
-(falta completar algunos R)
 
 ### R7 · `agregar_parada`, `quitar_parada`, `recorrido` — miembro 3
 
@@ -218,13 +313,23 @@ con la complejidad esperada y el análisis de la operación.
 
 ## Datos
 
-`datos/` contiene `estaciones.csv`, `rutas.csv` y `horarios.csv`, generados
-desde el GTFS con `scripts/convertir_gtfs.py`.
+`datos/` contiene los tres CSV de la red real de TransMilenio **que entregó el
+profesor** (Juan Carlos Rubio Coello) el 3 de noviembre de 2026 en el canal
+General del equipo de Teams *9324 PERIODO 2026-2 ESTRUC DATOS Y ALGORITMOS*
+(«Archivos para el proyecto final»). El profesor no compartió el ZIP GTFS y
+dio los datos ya convertidos, así que se usan tal cual, sin modificarlos.
 
-- **Procedencia:** GTFS de julio de 2021 indicado por el profesor
-  ([catálogo de Datos Abiertos Bogotá](https://datosabiertos.bogota.gov.co/dataset/especificacion-gtfs-general-transit-feed-specification-sitp)).
-  URL exacta del ZIP y SHA-256: pendiente. El ZIP no se sube al repositorio.
-- **Fecha de servicio:** 2021-07-21 (día hábil), pendiente de confirmar con el ZIP.
+| Archivo | Filas (sin cabecera) | SHA-256 |
+| --- | --- | --- |
+| `estaciones.csv` | 147 estaciones | `d2d1a61e715469dbb4f272f3aff4954b360ca09a8df15dd84cbd6af8e6764376` |
+| `rutas.csv` | 1.927 paradas en 181 rutas | `7fe7ef528ed1b55a218ee4e30125dd7c4f66142373616522668e6a6ae4dcec4c` |
+| `horarios.csv` | 140.492 pasos | `6b50b2a150083a58766f11ae061879fe97b52ae03f3ea39a410331667320317c` |
+
+`Red("datos")` los carga y valida en cerca de 1 s. `estaciones.csv` viene con
+fin de línea CRLF (Windows); `csv.reader` lo lee igual.
+
+`scripts/convertir_gtfs.py` queda como herramienta para regenerar CSV desde
+cualquier GTFS (por ejemplo, para probar con otra red más grande).
 
 ### Conversión (miembro 1)
 

@@ -38,6 +38,11 @@ def _nombre(texto):
     return " ".join(sin_tildes.split()).upper()
 
 
+def _ruta(texto):
+    """Los IDs de ruta se conservan salvo mayúsculas y espacios externos."""
+    return texto.strip().upper()
+
+
 def _crear_red(carpeta):
     from motor import Red
 
@@ -97,7 +102,7 @@ def crear_app(
 
     @aplicacion.get("/api/proximo-bus")
     def proximo_bus(estacion: str, ruta: str, hora: str):
-        return {"hora": consultar("proximo_bus", _nombre(estacion), ruta, hora)}
+        return {"hora": consultar("proximo_bus", _nombre(estacion), _ruta(ruta), hora)}
 
     @aplicacion.get("/api/viaje")
     def viaje(origen: str, destino: str):
@@ -123,17 +128,17 @@ def crear_app(
 
     @aplicacion.get("/api/recorrido")
     def recorrido(ruta: str, al_reves: bool = False):
-        return {"estaciones": consultar("recorrido", ruta, al_reves)}
+        return {"estaciones": consultar("recorrido", _ruta(ruta), al_reves)}
 
     @aplicacion.post("/api/paradas/agregar")
     def agregar_parada(entrada: AgregarParada):
         return {"cambio": consultar(
-            "agregar_parada", entrada.ruta, _nombre(entrada.nueva), _nombre(entrada.despues_de),
+            "agregar_parada", _ruta(entrada.ruta), _nombre(entrada.nueva), _nombre(entrada.despues_de),
         )}
 
     @aplicacion.post("/api/paradas/quitar")
     def quitar_parada(entrada: QuitarParada):
-        return {"cambio": consultar("quitar_parada", entrada.ruta, _nombre(entrada.estacion))}
+        return {"cambio": consultar("quitar_parada", _ruta(entrada.ruta), _nombre(entrada.estacion))}
 
     @aplicacion.post("/api/cerrar")
     def cerrar(entrada: Nombre):

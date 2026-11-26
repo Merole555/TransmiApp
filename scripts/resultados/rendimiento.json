@@ -1,134 +1,555 @@
-
+{
   "configuracion": {
     "semilla": 42,
     "repeticiones": 7,
+    "rondas": 5,
     "tamanos": "1000, 2000, 4000",
     "unidad": "ns/llamada",
-    "python": "3.9.6",
-    "entorno": "Darwin arm64"
+    "python": "3.12.3",
+    "entorno": "Linux x86_64"
   },
   "series": [
     {
       "operacion": "estado",
       "variable": "n: estaciones",
       "complejidad": "O(L) promedio con tabla hash",
-      "analisis": "Búsqueda por nombre en la tabla hash. Debería quedar casi igual al duplicar n.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Búsqueda por nombre en la tabla hash. Debería quedar casi igual al duplicar n. Razones observadas: 1.25, 0.79.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 772.5,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1000,
+            "rutas": 99,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 966.0,
+          "razon_anterior": 1.25,
+          "dimensiones": {
+            "estaciones": 2000,
+            "rutas": 199,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 764.7,
+          "razon_anterior": 0.79,
+          "dimensiones": {
+            "estaciones": 4000,
+            "rutas": 399,
+            "horarios_por_par": 2
+          }
+        }
+      ]
     },
     {
       "operacion": "autocompletar",
       "variable": "n: estaciones abiertas (k = 10)",
       "complejidad": "O(log n + k)",
-      "analisis": "Con k fijo la salida no crece, así que debería crecer poco (logarítmico).",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Con k fijo la salida no crece, así que debería crecer poco (logarítmico). Razones observadas: 0.93, 1.0.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 2453.7,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1000,
+            "rutas": 99,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 2286.7,
+          "razon_anterior": 0.93,
+          "dimensiones": {
+            "estaciones": 2000,
+            "rutas": 199,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 2287.0,
+          "razon_anterior": 1.0,
+          "dimensiones": {
+            "estaciones": 4000,
+            "rutas": 399,
+            "horarios_por_par": 2
+          }
+        }
+      ]
     },
     {
       "operacion": "rango",
       "variable": "n: estaciones abiertas (10 resultados)",
       "complejidad": "O(log n + s)",
-      "analisis": "Rango con 10 resultados fijos; se espera crecimiento logarítmico.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Rango con 10 resultados fijos; se espera crecimiento logarítmico. Razones observadas: 1.04, 0.97.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 1554.6,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1000,
+            "rutas": 99,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 1617.4,
+          "razon_anterior": 1.04,
+          "dimensiones": {
+            "estaciones": 2000,
+            "rutas": 199,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 1569.4,
+          "razon_anterior": 0.97,
+          "dimensiones": {
+            "estaciones": 4000,
+            "rutas": 399,
+            "horarios_por_par": 2
+          }
+        }
+      ]
     },
     {
       "operacion": "proximo_bus",
       "variable": "H: horarios del par ruta-estación",
       "complejidad": "O(log H) más búsqueda hash",
-      "analisis": "Búsqueda binaria en los horarios: la razón debería ser poco más de 1.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Búsqueda binaria en los horarios: la razón debería ser poco más de 1. Razones observadas: 1.05, 0.98.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 6259.6,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 50,
+            "rutas": 1,
+            "horarios_por_par": 1000
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 6557.2,
+          "razon_anterior": 1.05,
+          "dimensiones": {
+            "estaciones": 50,
+            "rutas": 1,
+            "horarios_por_par": 2000
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 6445.8,
+          "razon_anterior": 0.98,
+          "dimensiones": {
+            "estaciones": 50,
+            "rutas": 1,
+            "horarios_por_par": 4000
+          }
+        }
+      ]
     },
     {
       "operacion": "viaje",
       "variable": "n: estaciones (rutas de 20 paradas)",
       "complejidad": "O(suma de las rutas que pasan por el origen y los transbordos)",
-      "analisis": "Las rutas tienen tamaño fijo, entonces el trabajo no depende mucho de n.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Las rutas tienen tamaño fijo, entonces el trabajo no depende mucho de n. Razones observadas: 1.04, 0.98.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 49496.8,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1000,
+            "rutas": 99,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 51250.6,
+          "razon_anterior": 1.04,
+          "dimensiones": {
+            "estaciones": 2000,
+            "rutas": 199,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 50231.8,
+          "razon_anterior": 0.98,
+          "dimensiones": {
+            "estaciones": 4000,
+            "rutas": 399,
+            "horarios_por_par": 2
+          }
+        }
+      ]
     },
     {
       "operacion": "ranking",
       "variable": "n: estaciones abiertas (k = 10)",
       "complejidad": "O(k)",
-      "analisis": "El ranking ya está ordenado, solo se leen los primeros k.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "El ranking ya está ordenado, solo se leen los primeros k. Razones observadas: 1.03, 0.98.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 2479.0,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1000,
+            "rutas": 99,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 2565.1,
+          "razon_anterior": 1.03,
+          "dimensiones": {
+            "estaciones": 2000,
+            "rutas": 199,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 2513.4,
+          "razon_anterior": 0.98,
+          "dimensiones": {
+            "estaciones": 4000,
+            "rutas": 399,
+            "horarios_por_par": 2
+          }
+        }
+      ]
     },
     {
       "operacion": "agregar_parada",
       "variable": "p: paradas de la ruta",
       "complejidad": "O(1) promedio más actualizar el ranking",
-      "analisis": "Solo se cambian enlaces de la lista; no depende de p.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Solo se cambian enlaces de la lista; no depende de p. Razones observadas: 1.09, 0.94.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 9785,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 10630,
+          "razon_anterior": 1.09,
+          "dimensiones": {
+            "estaciones": 2002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 10022,
+          "razon_anterior": 0.94,
+          "dimensiones": {
+            "estaciones": 4002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        }
+      ]
     },
     {
       "operacion": "quitar_parada",
       "variable": "p: paradas de la ruta",
       "complejidad": "O(1) promedio más actualizar el ranking",
-      "analisis": "Igual que agregar, pero quitando el nodo.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Igual que agregar, pero quitando el nodo. Razones observadas: 1.04, 1.01.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 12682,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 13171,
+          "razon_anterior": 1.04,
+          "dimensiones": {
+            "estaciones": 2002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 13368,
+          "razon_anterior": 1.01,
+          "dimensiones": {
+            "estaciones": 4002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        }
+      ]
     },
     {
       "operacion": "recorrido",
       "variable": "p: paradas de la ruta",
       "complejidad": "O(p)",
-      "analisis": "Recorre toda la lista y crea una nueva: al duplicar p debería duplicarse.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Recorre toda la lista y crea una nueva: al duplicar p debería duplicarse. Razones observadas: 1.94, 2.02.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 24501.7,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 47562.2,
+          "razon_anterior": 1.94,
+          "dimensiones": {
+            "estaciones": 2002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 95958.8,
+          "razon_anterior": 2.02,
+          "dimensiones": {
+            "estaciones": 4002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        }
+      ]
     },
     {
       "operacion": "recorrido_inverso",
       "variable": "p: paradas de la ruta",
       "complejidad": "O(p)",
-      "analisis": "Igual que recorrido pero desde la cola (al_reves=True).",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Igual que recorrido pero desde la cola (al_reves=True). Razones observadas: 1.96, 2.03.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 23641.5,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 46329.5,
+          "razon_anterior": 1.96,
+          "dimensiones": {
+            "estaciones": 2002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 94204.1,
+          "razon_anterior": 2.03,
+          "dimensiones": {
+            "estaciones": 4002,
+            "rutas": 1,
+            "horarios_por_par": 1
+          }
+        }
+      ]
     },
     {
       "operacion": "cerrar",
       "variable": "n: estaciones abiertas",
       "complejidad": "O(log n)",
-      "analisis": "Quita la estación de los índices de abiertas.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Quita la estación de los índices de abiertas. Razones observadas: 1.11, 1.04.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 8339,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1000,
+            "rutas": 99,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 9282,
+          "razon_anterior": 1.11,
+          "dimensiones": {
+            "estaciones": 2000,
+            "rutas": 199,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 9670,
+          "razon_anterior": 1.04,
+          "dimensiones": {
+            "estaciones": 4000,
+            "rutas": 399,
+            "horarios_por_par": 2
+          }
+        }
+      ]
     },
     {
       "operacion": "reabrir",
       "variable": "n: estaciones abiertas",
       "complejidad": "O(log n)",
-      "analisis": "Vuelve a meter la estación en los índices de abiertas.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Vuelve a meter la estación en los índices de abiertas. Razones observadas: 1.11, 1.05.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 7853,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1000,
+            "rutas": 99,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 8707,
+          "razon_anterior": 1.11,
+          "dimensiones": {
+            "estaciones": 2000,
+            "rutas": 199,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 9166,
+          "razon_anterior": 1.05,
+          "dimensiones": {
+            "estaciones": 4000,
+            "rutas": 399,
+            "horarios_por_par": 2
+          }
+        }
+      ]
     },
     {
       "operacion": "deshacer",
       "variable": "n: estaciones abiertas",
       "complejidad": "O(1) en la pila más el costo de la acción",
-      "analisis": "Saca de una pila, invierte la acción y la pasa a la otra pila.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Saca de una pila, invierte la acción y la pasa a la otra pila. Razones observadas: 1.08, 1.07.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 7873,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1000,
+            "rutas": 99,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 8507,
+          "razon_anterior": 1.08,
+          "dimensiones": {
+            "estaciones": 2000,
+            "rutas": 199,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 9082,
+          "razon_anterior": 1.07,
+          "dimensiones": {
+            "estaciones": 4000,
+            "rutas": 399,
+            "horarios_por_par": 2
+          }
+        }
+      ]
     },
     {
       "operacion": "rehacer",
       "variable": "n: estaciones abiertas",
       "complejidad": "O(1) en la pila más el costo de la acción",
-      "analisis": "Igual que deshacer pero al revés.",
-      "puntos": [],
-      "error": "RuntimeError: Red todavía no está en el motor"
+      "analisis": "Igual que deshacer pero al revés. Razones observadas: 1.09, 1.05.",
+      "puntos": [
+        {
+          "n": 1000,
+          "mediana_ns": 7560,
+          "razon_anterior": null,
+          "dimensiones": {
+            "estaciones": 1000,
+            "rutas": 99,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 2000,
+          "mediana_ns": 8263,
+          "razon_anterior": 1.09,
+          "dimensiones": {
+            "estaciones": 2000,
+            "rutas": 199,
+            "horarios_por_par": 2
+          }
+        },
+        {
+          "n": 4000,
+          "mediana_ns": 8693,
+          "razon_anterior": 1.05,
+          "dimensiones": {
+            "estaciones": 4000,
+            "rutas": 399,
+            "horarios_por_par": 2
+          }
+        }
+      ]
     },
     {
       "operacion": "simular_fila",
       "variable": "n: pasajeros (frecuencia 5, capacidad 40)",
       "complejidad": "O(n)",
-      "analisis": "Recorre las llegadas una sola vez: al duplicar n el tiempo debería duplicarse. Razones observadas: 1.73, 1.86.",
+      "analisis": "Recorre las llegadas una sola vez: al duplicar n el tiempo debería duplicarse. Razones observadas: 1.95, 2.1.",
       "puntos": [
         {
           "n": 1000,
-          "mediana_ns": 466958.5,
+          "mediana_ns": 205160.5,
           "razon_anterior": null,
           "dimensiones": {
             "pasajeros": 1000
@@ -136,16 +557,16 @@
         },
         {
           "n": 2000,
-          "mediana_ns": 807187.5,
-          "razon_anterior": 1.73,
+          "mediana_ns": 400346.0,
+          "razon_anterior": 1.95,
           "dimensiones": {
             "pasajeros": 2000
           }
         },
         {
           "n": 4000,
-          "mediana_ns": 1503042.0,
-          "razon_anterior": 1.86,
+          "mediana_ns": 839011.5,
+          "razon_anterior": 2.1,
           "dimensiones": {
             "pasajeros": 4000
           }
