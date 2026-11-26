@@ -20,6 +20,8 @@ export interface ResultadoFila {
   espera_promedio: number
   espera_maxima: number
 }
+/** Acciones que se pueden deshacer / rehacer, la más reciente primero. */
+export interface Historial { deshacer: string[]; rehacer: string[] }
 
 export interface PuntoRendimiento {
   n: number
@@ -55,6 +57,7 @@ function mensajeDeError(cuerpo: unknown, estado: number): string {
         .join('; ')
     }
   }
+  if (estado >= 500) return 'El servidor tuvo un error interno. Revisa la terminal donde corre el backend.'
   return `Error HTTP ${estado}`
 }
 
@@ -119,6 +122,11 @@ export const api = {
   reabrir: (nombre: string) => enviar<{ cambio: boolean }>('/api/reabrir', { nombre }).then((r) => r.cambio),
   deshacer: () => enviar<{ cambio: boolean }>('/api/deshacer').then((r) => r.cambio),
   rehacer: () => enviar<{ cambio: boolean }>('/api/rehacer').then((r) => r.cambio),
+
+  // Listas auxiliares para la interfaz
+  rutas: () => pedir<{ rutas: string[] }>('/api/rutas').then((r) => r.rutas),
+  cerradas: () => pedir<{ estaciones: string[] }>('/api/cerradas').then((r) => r.estaciones),
+  historial: () => pedir<Historial>('/api/historial'),
 
   // R10–R11
   simularFila: (llegadas: number[], frecuencia: number, capacidad: number) =>

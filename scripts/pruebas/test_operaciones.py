@@ -228,6 +228,27 @@ class HistorialTests(OperacionesBase):
         self.assertFalse(red.deshacer())
 
 
+class ConsultasAuxiliaresTests(OperacionesBase):
+    def test_listar_rutas_y_cerradas(self):
+        self.assertEqual(self.red.listar_rutas(), ["T1", "T2"])
+        self.assertEqual(self.red.listar_cerradas(), [])
+        self.red.cerrar("D")
+        self.red.cerrar("B")
+        self.assertEqual(self.red.listar_cerradas(), ["B", "D"])
+        self.red.reabrir("B")
+        self.assertEqual(self.red.listar_cerradas(), ["D"])
+
+    def test_historial_visible(self):
+        self.assertEqual(self.red.historial(), ([], []))
+        self.red.cerrar("B")
+        self.red.agregar_parada("T1", "E", "B")
+        self.assertEqual(self.red.historial(), (["Agregar E después de B en T1", "Cerrar B"], []))
+        self.red.deshacer()
+        self.assertEqual(self.red.historial(), (["Cerrar B"], ["Agregar E después de B en T1"]))
+        self.red.quitar_parada("T2", "B")
+        self.assertEqual(self.red.historial(), (["Quitar B de T2", "Cerrar B"], []))
+
+
 class ModeloReferencia:
     """Modelo pequeño con listas, dict y set (permitido fuera de motor/)."""
 
